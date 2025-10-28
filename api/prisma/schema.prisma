@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Ingredient {
+  id        Int      @id @default(autoincrement())
+  name      String
+  typeId    Int
+  binNo     String?
+  unitSmall String?
+  unitBig   String?
+  minQty    Float?
+  maxQty    Float?
+  curQty    Float?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  bins      Bin[] // reverse relation from Bin → Ingredient
+}
+
+// --------------- Raw Material + Lots + Inventory ---------------
+model RawMaterial {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  uom       String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  lots      RawLot[]
+}
+
+model RawLot {
+  id            Int       @id @default(autoincrement())
+  rawMaterialId Int
+  supplier      String?
+  receivedAt    DateTime  @default(now())
+  qtyReceived   Float
+  qtyOnHand     Float
+  expiryDate    DateTime?
+  qrCode        String    @unique
+  binId         Int?
+
+  rawMaterial RawMaterial    @relation(fields: [rawMaterialId], references: [id])
+  bin         Bin?           @relation(fields: [binId], references: [id])
+  txns        InventoryTxn[]
+}
+
+model InventoryTxn {
+  id      Int      @id @default(autoincrement())
+  lotId   Int
+  txnType TxnType
+  qty     Float
+  at      DateTime @default(now())
+  ref     String?
+  userId  Int?
+
+  lot RawLot @relation(fields: [lotId], references: [id])
+}
+
+// ------------------ Bin ---------------------
+model Bin {
+  id           Int     @id @default(autoincrement())
+  code         String  @unique
+  ingredientId Int?
+  minQty       Float?
+  maxQty       Float?
+  active       Boolean @default(true)
+
+  ingredient Ingredient? @relation(fields: [ingredientId], references: [id])
+  lots       RawLot[] // reverse link
+}
+
+enum TxnType {
+  INWARD
+  OUTWARD
+  CONSUME
+  RETURN
+}
