@@ -1,10 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+
+import { useRouter } from 'next/navigation';
+import { useCreateInward } from '@/hooks/useInward';
+
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import QrPreviewModal from '../components/QrPreviewModal';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Separator } from '@/components/ui/separator';
+import { toast } from '@/components/ui/use-toast';
 import {
   Select,
   SelectTrigger,
@@ -12,11 +21,6 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Separator } from '@/components/ui/separator';
-import { useCreateInward } from '@/hooks/useInward';
-import { toast } from '@/components/ui/use-toast';
-import { useRouter } from 'next/navigation';
 import {
   Dialog,
   DialogContent,
@@ -27,8 +31,19 @@ import {
 
 export default function AddInwardPage() {
   const router = useRouter();
-  const { mutateAsync: createInward, isPending } = useCreateInward();
+  const [addNew, setAddNew] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [savedInwardId, setSavedInwardId] = useState<number | null>(null);
+
+  const { mutateAsync: createInward, isPending } = useCreateInward();
+
+  const materialsList = [
+    'Zinc Oxide',
+    'Carbon Black',
+    'Stearic Acid',
+    'Sulphur',
+  ];
 
   const [formData, setFormData] = useState({
     material: '',
@@ -37,22 +52,14 @@ export default function AddInwardPage() {
     quantity: '',
     bagWeight: '',
     storedAsWhole: false,
+    unit: 'KG',
     mfgDate: new Date().toISOString().split('T')[0],
     expDate: '',
   });
 
-  const [addNew, setAddNew] = useState(false);
-
   const handleChange = (key: string, value: any) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
-
-  const materialsList = [
-    'Zinc Oxide',
-    'Carbon Black',
-    'Stearic Acid',
-    'Sulphur',
-  ];
 
   const handleSubmit = async () => {
     const {
@@ -81,13 +88,14 @@ export default function AddInwardPage() {
       quantity: Number(quantity),
       bagWeight: storedAsWhole ? 0 : Number(bagWeight),
       storedAsWhole,
-      unit: 'KG',
+      unit: formData.unit,
       mfgDate,
       expDate,
     };
 
     try {
-      await createInward(payload);
+      const res = await createInward(payload);
+      setSavedInwardId(res.data?.id || null);
       setShowSuccessModal(true);
     } catch (error) {
       console.error(error);
@@ -145,6 +153,7 @@ export default function AddInwardPage() {
 
           <Separator />
 
+          {/* Supplier Name */}
           <div>
             <Label>Supplier Name</Label>
             <Input
@@ -155,16 +164,36 @@ export default function AddInwardPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            {/* Total Quantity */}
             <div>
-              <Label>Total Quantity (KG)</Label>
+              <Label>Total Quantity</Label>
               <Input
                 type="number"
                 value={formData.quantity}
                 onChange={(e) => handleChange('quantity', e.target.value)}
               />
             </div>
+
+            {/* Unit */}
             <div>
-              <Label>Bag Weight (KG)</Label>
+              <Label>Unit</Label>
+              <Select
+                value={formData.unit}
+                onValueChange={(v) => handleChange('unit', v)}
+              >
+                <SelectTrigger className="bg-white">
+                  <SelectValue placeholder="Select unit" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  <SelectItem value="KG">Kilogram (KG)</SelectItem>
+                  <SelectItem value="L">Litre (L)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Bag Weight */}
+            <div>
+              <Label>Bag Weight</Label>
               <Input
                 type="number"
                 value={formData.bagWeight}
@@ -174,6 +203,7 @@ export default function AddInwardPage() {
             </div>
           </div>
 
+          {/* Stored as whole checkbox */}
           <div className="flex items-center gap-2">
             <Checkbox
               checked={formData.storedAsWhole}
@@ -184,6 +214,7 @@ export default function AddInwardPage() {
             <Label>Stored as Whole?</Label>
           </div>
 
+          {/* Manufacturing date */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Manufacturing Date</Label>
@@ -203,6 +234,7 @@ export default function AddInwardPage() {
             </div>
           </div>
 
+          {/* No. of bags(automatic) */}
           <div>
             <Label>Total Bags</Label>
             <Input
@@ -212,6 +244,7 @@ export default function AddInwardPage() {
             />
           </div>
 
+          {/* Save and canel button */}
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => router.push('/inward')}>
               Cancel
@@ -222,6 +255,8 @@ export default function AddInwardPage() {
           </div>
         </div>
       </div>
+
+      {/* Success Modal */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
         <DialogContent className="sm:max-w-md bg-white rounded-lg shadow-lg border border-gray-200 p-6">
           <DialogHeader>
@@ -243,16 +278,27 @@ export default function AddInwardPage() {
             >
               Close
             </Button>
-
             <Button
               className="bg-green-600 hover:bg-green-700"
-              onClick={() => alert('QR Printing feature coming soon!')}
+              onClick={() => {
+                setShowSuccessModal(false);
+                setShowQRModal(true);
+                setTimeout(() => router.push('/inward'), 2000);
+              }}
             >
               Print QR
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {savedInwardId && (
+        <QrPreviewModal
+          open={showQRModal}
+          onClose={setShowQRModal}
+          inwardId={savedInwardId}
+        />
+      )}
     </DashboardLayout>
   );
 }

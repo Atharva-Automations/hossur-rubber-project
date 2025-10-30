@@ -1,8 +1,10 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, QrCode } from 'lucide-react';
 import { useState } from 'react';
+import { Pencil, Trash2, QrCode } from 'lucide-react';
+import EditInwardDrawer from './EditInwardDrawer';
+import QrPreviewModal from './QrPreviewModal';
+import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -12,13 +14,19 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
-import EditInwardDrawer from './EditInwardDrawer';
-import QRPreviewModal from './QrPreviewModal';
+import { useDeleteInward } from '@/hooks/useInward';
 
-export default function InwardActions({ item, onEdit, onDelete }: any) {
+export default function InwardActions({ item, onEdit }: any) {
   const [openEdit, setOpenEdit] = useState(false);
   const [openQR, setOpenQR] = useState(false);
   const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
+
+  const { mutate: deleteInward } = useDeleteInward();
+
+  const handleDelete = () => {
+    deleteInward(item.id);
+    setOpenDeleteConfirm(false);
+  };
 
   return (
     <div className="flex gap-2">
@@ -61,11 +69,7 @@ export default function InwardActions({ item, onEdit, onDelete }: any) {
       />
 
       {/* QR Modal */}
-      <QRPreviewModal
-        open={openQR}
-        onClose={() => setOpenQR(false)}
-        item={item}
-      />
+      <QrPreviewModal open={openQR} onClose={setOpenQR} inwardId={item.id} />
 
       {/* Delete Confirmation */}
       <AlertDialog open={openDeleteConfirm} onOpenChange={setOpenDeleteConfirm}>
@@ -80,10 +84,7 @@ export default function InwardActions({ item, onEdit, onDelete }: any) {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-red-600 hover:bg-red-700"
-              onClick={() => {
-                onDelete(item.id);
-                setOpenDeleteConfirm(false);
-              }}
+              onClick={handleDelete}
             >
               Delete
             </AlertDialogAction>

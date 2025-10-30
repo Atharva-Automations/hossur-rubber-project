@@ -6,3 +6,10 @@
 body {
   @apply bg-gray-50 text-gray-900;
 }
+
+/* Fix transparent modal backgrounds */
+[data-state='open'] > div[data-portal] > div {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(6px);
+  border-radius: 8px;
+}

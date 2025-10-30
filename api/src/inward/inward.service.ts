@@ -12,7 +12,11 @@ export class InwardService {
     const today = new Date();
     // normalize to date-only comparison
     const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const e = new Date(expDate.getFullYear(), expDate.getMonth(), expDate.getDate());
+    const e = new Date(
+      expDate.getFullYear(),
+      expDate.getMonth(),
+      expDate.getDate()
+    );
     return e < t ? 'Expired' : 'Active';
   }
 
@@ -22,20 +26,21 @@ export class InwardService {
     const status = this.computeStatus(exp);
 
     // Inside create()
-const inward = await this.prisma.inwardEntry.create({
-  data: {
-    materialName: dto.materialName.trim(),
-    supplierName: dto.supplierName.trim(),
-    quantity: dto.quantity,
-    unit: dto.unit, // 👈 Added here
-    bagWeight: dto.bagWeight ?? null,
-    storedAsWhole: dto.storedAsWhole ?? false,
-    mfgDate: new Date(dto.mfgDate),
-    expDate: new Date(dto.expDate),
-    status: this.computeStatus(new Date(dto.expDate)),
-  },
-});
+    const inward = await this.prisma.inwardEntry.create({
+      data: {
+        materialName: dto.materialName.trim(),
+        supplierName: dto.supplierName.trim(),
+        quantity: dto.quantity,
+        unit: dto.unit, // 👈 Added here
+        bagWeight: dto.bagWeight ?? null,
+        storedAsWhole: dto.storedAsWhole ?? false,
+        mfgDate: new Date(dto.mfgDate),
+        expDate: new Date(dto.expDate),
+        status: this.computeStatus(new Date(dto.expDate)),
+      },
+    });
 
+    await this.incrementStock(dto.materialName, dto.unit, dto.quantity);
 
     const qrList = this.buildQrList(inward);
     if (qrList.length) {
@@ -98,7 +103,8 @@ const inward = await this.prisma.inwardEntry.create({
       where: { id: inwardId },
       include: { qrCodes: true },
     });
-    if (!inward) throw new NotFoundException(`Inward entry ${inwardId} not found`);
+    if (!inward)
+      throw new NotFoundException(`Inward entry ${inwardId} not found`);
 
     return inward.qrCodes.map((qr) => ({
       bagNo: qr.bagNo,
@@ -136,6 +142,14 @@ const inward = await this.prisma.inwardEntry.create({
       },
     });
 
+    await this.adjustStockOnEdit(
+      existing.materialName,
+      dto.materialName ?? existing.materialName,
+      existing.quantity,
+      dto.quantity ?? existing.quantity,
+      dto.unit ?? existing.unit
+    );
+
     const bagLogicChanged =
       (dto.quantity !== undefined && dto.quantity !== existing.quantity) ||
       (dto.bagWeight !== undefined && dto.bagWeight !== existing.bagWeight) ||
@@ -156,9 +170,122 @@ const inward = await this.prisma.inwardEntry.create({
   }
 
   async remove(id: number) {
-    // delete children first to satisfy FK constraints
+    const existing = await this.prisma.inwardEntry.findUnique({
+      where: { id },
+    });
+    if (!existing) throw new NotFoundException('Inward entry not found');
+
     await this.prisma.inwardQrCode.deleteMany({ where: { inwardId: id } });
     await this.prisma.inwardEntry.delete({ where: { id } });
+
+    await this.decrementStock(existing.materialName, existing.quantity);
+
     return { ok: true };
+  }
+
+  // ---------- STOCK MANAGEMENT HELPERS ----------
+
+  async getStock() {
+    return this.prisma.materialStock.findMany({
+      orderBy: { materialName: 'asc' },
+    });
+  }
+
+  private async incrementStock(
+    materialName: string,
+    unit: string,
+    quantity: number
+  ) {
+    await this.prisma.materialStock.upsert({
+      where: { materialName },
+      update: {
+        totalQuantity: { increment: quantity },
+        updatedAt: new Date(),
+      },
+      create: {
+        materialName,
+        totalQuantity: quantity,
+        unit,
+      },
+    });
+  }
+
+  private async adjustStockOnEdit(
+    oldMaterial: string,
+    newMaterial: string,
+    oldQty: number,
+    newQty: number,
+    unit: string
+  ) {
+    if (oldMaterial === newMaterial) {
+      const diff = newQty - oldQty;
+      if (diff !== 0) {
+        await this.prisma.materialStock.update({
+          where: { materialName: oldMaterial },
+          data: { totalQuantity: { increment: diff } },
+        });
+      }
+    } else {
+      // subtract from old material
+      await this.prisma.materialStock.update({
+        where: { materialName: oldMaterial },
+        data: { totalQuantity: { decrement: oldQty } },
+      });
+
+      // add to new material
+      await this.incrementStock(newMaterial, unit, newQty);
+    }
+  }
+
+  private async decrementStock(materialName: string, quantity: number) {
+    await this.prisma.materialStock.update({
+      where: { materialName },
+      data: { totalQuantity: { decrement: quantity } },
+    });
+  }
+
+  async getAnalytics() {
+    const all = await this.prisma.inwardEntry.findMany();
+
+    const totalMaterials = all.length;
+    const active = all.filter((r) => r.status === 'Active').length;
+    const expired = all.filter((r) => r.status === 'Expired').length;
+
+    // Aggregate total quantity by supplier
+    const supplierMap = new Map<string, number>();
+    for (const r of all) {
+      const current = supplierMap.get(r.supplierName) ?? 0;
+      supplierMap.set(r.supplierName, current + r.quantity);
+    }
+
+    const topSuppliers = Array.from(supplierMap.entries())
+      .map(([supplier, qty]) => ({ supplier, qty }))
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 5);
+
+    return { totalMaterials, active, expired, topSuppliers };
+  }
+
+  async findAllFiltered(
+    search?: string,
+    status?: string,
+    sort: 'asc' | 'desc' = 'desc'
+  ) {
+    return this.prisma.inwardEntry.findMany({
+      where: {
+        AND: [
+          search
+            ? {
+                materialName: {
+                  contains: search,
+                  mode: 'insensitive',
+                },
+              }
+            : {},
+          status && status !== 'All' ? { status } : {},
+        ],
+      },
+      orderBy: { createdAt: sort },
+    });
   }
 }

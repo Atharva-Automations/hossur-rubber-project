@@ -4,49 +4,34 @@ import Link from 'next/link';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import InwardTable from './components/InwardTable';
 import FilterBar from './components/FilterBar';
-import InwardAnalytics, { InwardRow } from './components/InwardAnalytics';
+import InwardAnalytics from './components/InwardAnalytics';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
-
-const initialRows: InwardRow[] = [
-  {
-    id: 1,
-    name: 'Zinc Oxide',
-    qty: 100,
-    unit: 'KG',
-    bags: 20,
-    supplier: 'ABC Polymers',
-    date: '2025-10-28',
-    status: 'Active',
-  },
-  {
-    id: 2,
-    name: 'Carbon Black',
-    qty: 50,
-    unit: 'KG',
-    bags: 10,
-    supplier: 'XYZ Chemicals',
-    date: '2025-10-27',
-    status: 'Active',
-  },
-  {
-    id: 3,
-    name: 'Stearic Acid',
-    qty: 30,
-    unit: 'KG',
-    bags: 6,
-    supplier: 'Delta Supplies',
-    date: '2025-10-25',
-    status: 'Expired',
-  },
-];
+import { useInwardData } from '@/hooks/useInwardData';
 
 export default function InwardPage() {
-  const [rows] = useState<InwardRow[]>(initialRows);
+  // ✅ State for filters
+  const [filters, setFilters] = useState<{
+    search?: string;
+    status?: string;
+    sort?: 'asc' | 'desc';
+  }>({
+    search: '',
+    status: 'All',
+    sort: 'desc',
+  });
+
+  // ✅ Fetch data from backend
+  const { data = [], isLoading, isError } = useInwardData(filters);
+
+  const handleFilterChange = (updatedFilters: any) => {
+    setFilters(updatedFilters);
+  };
 
   return (
     <DashboardLayout>
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-semibold">Inward Materials</h2>
 
@@ -58,13 +43,23 @@ export default function InwardPage() {
         </Link>
       </div>
 
+      {/* KPI & Charts */}
       <div className="mb-4">
-        <InwardAnalytics rows={rows} />
+        <InwardAnalytics rows={data} />
       </div>
 
-      <FilterBar onFilterChange={(filters) => console.log(filters)} />
+      {/* Filters */}
+      <FilterBar onFilterChange={handleFilterChange} />
+
+      {/* Table */}
       <div className="mt-4">
-        <InwardTable />
+        {isLoading ? (
+          <p>Loading...</p>
+        ) : isError ? (
+          <p>Error loading inward materials.</p>
+        ) : (
+          <InwardTable data={data} />
+        )}
       </div>
     </DashboardLayout>
   );

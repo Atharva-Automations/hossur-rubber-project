@@ -1,14 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Card } from '@/components/ui/card';
-// import {
-//   Select,
-//   SelectContent,
-//   SelectItem,
-//   SelectTrigger,
-//   SelectValue,
-// } from '@/components/ui/select';
+import { useMaterialStock } from '@/hooks/useMaterialStock';
+import { useInwardAnalytics } from '@/hooks/useInwardAnalytics';
 import {
   ResponsiveContainer,
   PieChart,
@@ -21,6 +15,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
+import { Card } from '@/components/ui/card';
 
 export type InwardRow = {
   id: number;
@@ -34,36 +29,7 @@ export type InwardRow = {
 };
 
 export default function InwardAnalytics({ rows }: { rows: InwardRow[] }) {
-//   const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
-
-  // --- KPI totals ---
-  const totals = useMemo(() => {
-    const totalMaterials = rows.length;
-    const active = rows.filter((r) => r.status === 'Active').length;
-    const expired = rows.filter((r) => r.status === 'Expired').length;
-    return { totalMaterials, active, expired };
-  }, [rows]);
-
-  // --- Quantity by Material ---
-  const dataByMaterial = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const r of rows) {
-      map.set(r.name, (map.get(r.name) ?? 0) + r.qty);
-    }
-    return Array.from(map.entries()).map(([name, qty]) => ({ name, qty }));
-  }, [rows]);
-
-  // --- Top Suppliers by Total Quantity ---
-  const dataBySupplier = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const r of rows) {
-      map.set(r.supplier, (map.get(r.supplier) ?? 0) + r.qty);
-    }
-    return Array.from(map.entries())
-      .map(([supplier, qty]) => ({ supplier, qty }))
-      .sort((a, b) => b.qty - a.qty)
-      .slice(0, 5);
-  }, [rows]);
+  const { data: analytics, isLoading: loadingAnalytics } = useInwardAnalytics();
 
   const COLORS = [
     '#60a5fa',
@@ -75,6 +41,15 @@ export default function InwardAnalytics({ rows }: { rows: InwardRow[] }) {
     '#fb7185',
   ];
 
+  // --- Material Stock Pie Chart Data ---
+  const { data: materialStockData } = useMaterialStock();
+  const materialStock = useMemo(() => {
+    return materialStockData?.map((stock) => ({
+      name: stock.materialName,
+      qty: stock.totalQuantity,
+    }));
+  }, [materialStockData]);
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
       {/* Left side — KPIs + Suppliers */}
@@ -84,29 +59,29 @@ export default function InwardAnalytics({ rows }: { rows: InwardRow[] }) {
           <Card className="p-4">
             <div className="text-sm text-gray-500">Total Materials</div>
             <div className="text-2xl font-semibold">
-              {totals.totalMaterials}
+              {loadingAnalytics ? '...' : analytics?.totalMaterials ?? 0}
             </div>
           </Card>
           <Card className="p-4">
             <div className="text-sm text-gray-500">Active</div>
             <div className="text-2xl font-semibold text-green-600">
-              {totals.active}
+              {loadingAnalytics ? '...' : analytics?.active ?? 0}
             </div>
           </Card>
           <Card className="p-4">
             <div className="text-sm text-gray-500">Expired</div>
             <div className="text-2xl font-semibold text-red-600">
-              {totals.expired}
+              {loadingAnalytics ? '...' : analytics?.expired ?? 0}
             </div>
           </Card>
         </div>
 
-        {/* Suppliers Chart fills remaining height */}
+        {/* Top Suppliers by Quantity Chart */}
         <Card className="p-4 flex-1">
           <div className="font-medium mb-3">Top Suppliers by Quantity</div>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dataBySupplier}>
+              <BarChart data={analytics?.topSuppliers || []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="supplier" />
                 <YAxis />
@@ -118,30 +93,27 @@ export default function InwardAnalytics({ rows }: { rows: InwardRow[] }) {
         </Card>
       </div>
 
-      {/* Right side — Pie/Bar chart */}
-      <Card className="p-4 ">
-        <div className="flex items-center justify-between mb-10">
-          <div className="font-medium">Quantity by Material</div>    
-        </div>
-
+      {/* Right side — Material Stock Pie Chart */}
+      <Card className="p-4">
+        <div className="font-medium mb-3">Quantity by Material</div>
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                <Tooltip />
-                <Pie
-                    data={dataByMaterial}
-                    dataKey="qty"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={70}
-                    paddingAngle={3}
-                >
-                    {dataByMaterial.map((_, idx) => (
-                        <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
-                    ))}
-                </Pie>
+              <Tooltip />
+              <Pie
+                data={materialStock}
+                dataKey="qty"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={70}
+                paddingAngle={3}
+              >
+                {materialStock?.map((_, idx) => (
+                  <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                ))}
+              </Pie>
             </PieChart>
           </ResponsiveContainer>
         </div>
