@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 import { useCreateInward } from '@/hooks/useInward';
+import { useMaterials, useSuppliers } from '@/hooks/useLookup';
 
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import QrPreviewModal from '../components/QrPreviewModal';
@@ -29,21 +30,30 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
+type InwardForm = {
+  material: string;
+  newMaterial: string;
+  supplier: string;
+  quantity: string;
+  bagWeight: string;
+  storedAsWhole: boolean;
+  unit: string;
+  mfgDate: string;
+  expDate: string;
+};
+
 export default function AddInwardPage() {
   const router = useRouter();
   const [addNew, setAddNew] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [addNewSupplier, setAddNewSupplier] = useState(false);
   const [savedInwardId, setSavedInwardId] = useState<number | null>(null);
 
   const { mutateAsync: createInward, isPending } = useCreateInward();
 
-  const materialsList = [
-    'Zinc Oxide',
-    'Carbon Black',
-    'Stearic Acid',
-    'Sulphur',
-  ];
+  const { data: materials = [], isLoading: loadingMaterials } = useMaterials();
+  const { data: suppliers = [], isLoading: loadingSuppliers } = useSuppliers();
 
   const [formData, setFormData] = useState({
     material: '',
@@ -62,19 +72,15 @@ export default function AddInwardPage() {
   };
 
   const handleSubmit = async () => {
-    const {
-      material,
-      newMaterial,
-      supplier,
-      quantity,
-      bagWeight,
-      storedAsWhole,
-      mfgDate,
-      expDate,
-    } = formData;
-    const selectedMaterial = addNew ? newMaterial : material;
+    const selectedMaterial = addNew ? formData.newMaterial : formData.material;
 
-    if (!selectedMaterial || !supplier || !quantity || !mfgDate || !expDate) {
+    if (
+      !selectedMaterial ||
+      !formData.supplier ||
+      !formData.quantity ||
+      !formData.mfgDate ||
+      !formData.expDate
+    ) {
       toast({
         title: 'Missing Fields',
         description: 'Please fill in all required fields before saving.',
@@ -82,15 +88,33 @@ export default function AddInwardPage() {
       return;
     }
 
+    if (addNew) {
+      if (!formData.newMaterial.trim()) {
+        toast({
+          title: 'Missing Material',
+          description: 'Please enter a material name.',
+        });
+        return;
+      }
+      if (materialExists) {
+        toast({
+          title: 'Duplicate Material',
+          description:
+            'This material already exists. Please select it from the list.',
+        });
+        return;
+      }
+    }
+
     const payload = {
-      materialName: selectedMaterial,
-      supplierName: supplier,
-      quantity: Number(quantity),
-      bagWeight: storedAsWhole ? 0 : Number(bagWeight),
-      storedAsWhole,
-      unit: formData.unit,
-      mfgDate,
-      expDate,
+      materialName: selectedMaterial.trim(),
+      supplierName: formData.supplier.trim(),
+      quantity: Number(formData.quantity),
+      bagWeight: formData.storedAsWhole ? 0 : Number(formData.bagWeight),
+      storedAsWhole: formData.storedAsWhole,
+      unit: formData.unit ?? 'KG',
+      mfgDate: formData.mfgDate,
+      expDate: formData.expDate,
     };
 
     try {
@@ -105,6 +129,20 @@ export default function AddInwardPage() {
       });
     }
   };
+  const equalsI = (a: string, b: string) =>
+    a.trim().toLowerCase() === b.trim().toLowerCase();
+  const materialExists =
+    addNew && formData.newMaterial
+      ? materials.some((m) => equalsI(m, formData.newMaterial))
+      : false;
+
+  {
+    addNew && formData.newMaterial && materialExists && (
+      <p className="text-xs text-red-600 mt-1">
+        A material with this name already exists.
+      </p>
+    );
+  }
 
   const totalBags = formData.storedAsWhole
     ? 1
@@ -128,17 +166,22 @@ export default function AddInwardPage() {
                   if (v === 'add-new') setAddNew(true);
                   else handleChange('material', v);
                 }}
+                disabled={loadingMaterials}
               >
                 <SelectTrigger className="bg-white mt-1">
-                  <SelectValue placeholder="Select material" />
+                  <SelectValue
+                    placeholder={
+                      loadingMaterials ? 'Loading...' : 'Select material'
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent className="bg-white shadow-md">
-                  {materialsList.map((m) => (
+                  <SelectItem value="add-new">➕ Add New Material</SelectItem>
+                  {materials.map((m) => (
                     <SelectItem key={m} value={m}>
                       {m}
                     </SelectItem>
                   ))}
-                  <SelectItem value="add-new">➕ Add New Material</SelectItem>
                 </SelectContent>
               </Select>
             ) : (
@@ -151,17 +194,45 @@ export default function AddInwardPage() {
             )}
           </div>
 
-          <Separator />
-
           {/* Supplier Name */}
           <div>
-            <Label>Supplier Name</Label>
-            <Input
-              placeholder="Enter supplier name"
-              value={formData.supplier}
-              onChange={(e) => handleChange('supplier', e.target.value)}
-            />
+            <Label>Supplier</Label>
+            {!addNewSupplier ? (
+              <Select
+                value={formData.supplier}
+                onValueChange={(v) => {
+                  if (v === 'add-new') setAddNewSupplier(true);
+                  else handleChange('supplier', v);
+                }}
+                disabled={loadingSuppliers}
+              >
+                <SelectTrigger className="bg-white mt-1">
+                  <SelectValue
+                    placeholder={
+                      loadingSuppliers ? 'Loading...' : 'Select supplier'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent className="bg-white shadow-md">
+                  <SelectItem value="add-new">➕ Add New Supplier</SelectItem>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                placeholder="Enter new supplier name"
+                value={formData.supplier}
+                onChange={(e) => handleChange('supplier', e.target.value)}
+                className="mt-2"
+              />
+            )}
           </div>
+
+          <Separator />
 
           <div className="grid grid-cols-2 gap-4">
             {/* Total Quantity */}
@@ -214,8 +285,10 @@ export default function AddInwardPage() {
             <Label>Stored as Whole?</Label>
           </div>
 
-          {/* Manufacturing date */}
+          <Separator />
+
           <div className="grid grid-cols-2 gap-4">
+            {/* Manufacturing date */}
             <div>
               <Label>Manufacturing Date</Label>
               <Input
@@ -224,11 +297,13 @@ export default function AddInwardPage() {
                 onChange={(e) => handleChange('mfgDate', e.target.value)}
               />
             </div>
+            {/* Expiry date */}
             <div>
               <Label>Expiry Date</Label>
               <Input
                 type="date"
-                value={formData.expDate}
+                min={formData.mfgDate || new Date().toISOString().split('T')[0]}
+                value={formData.expDate || ''}
                 onChange={(e) => handleChange('expDate', e.target.value)}
               />
             </div>

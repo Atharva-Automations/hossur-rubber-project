@@ -48,6 +48,16 @@ export class InwardController {
     return this.inwardService.getAnalytics();
   }
 
+  @Get('materials')
+  async getMaterials() {
+    return this.inwardService.getMaterials();
+  }
+
+  @Get('suppliers')
+  async getSuppliers() {
+    return this.inwardService.getSuppliers();
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.inwardService.findOne(id);

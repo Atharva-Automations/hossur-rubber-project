@@ -9,27 +9,27 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-// import { Button } from '@/components/ui/button';
-// import { Pencil, Trash2 } from 'lucide-react';
 import OutwardActions from './OutwardActions';
 
 const sampleData = [
   {
     id: 1,
-    material: 'Zinc Oxide',
-    issuedQty: 10,
+    materialName: 'Zinc Oxide',
+    quantity: 100,
     unit: 'KG',
-    destination: 'Mixing Line 1',
-    date: '2025-10-28',
+    issuedTo: 'Mixing Line 1',
+    purpose: 'Production',
+    date: '2025-10-29',
     status: 'Completed',
   },
   {
     id: 2,
-    material: 'Carbon Black',
-    issuedQty: 5,
+    materialName: 'Carbon Black',
+    quantity: 50,
     unit: 'KG',
-    destination: 'Kneader 2',
-    date: '2025-10-27',
+    issuedTo: 'Line 2',
+    purpose: 'Trial',
+    date: '2025-10-28',
     status: 'Pending',
   },
 ];
@@ -47,6 +47,10 @@ export default function OutwardTable() {
     setData(data.filter((item) => item.id !== id));
   };
 
+  const handleQr = (id: number) => {
+    console.log('Show QR for outward entry', id);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-sm border p-4 overflow-x-auto">
       <Table>
@@ -54,8 +58,9 @@ export default function OutwardTable() {
           <TableRow>
             <TableHead>ID</TableHead>
             <TableHead>Material</TableHead>
-            <TableHead>Issued Qty</TableHead>
-            <TableHead>Destination</TableHead>
+            <TableHead>Quantity</TableHead>
+            <TableHead>Issued To</TableHead>
+            <TableHead>Purpose</TableHead>
             <TableHead>Date</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -65,11 +70,12 @@ export default function OutwardTable() {
           {data.map((item) => (
             <TableRow key={item.id}>
               <TableCell>{item.id}</TableCell>
-              <TableCell>{item.material}</TableCell>
+              <TableCell>{item.materialName}</TableCell>
               <TableCell>
-                {item.issuedQty} {item.unit}
+                {item.quantity} {item.unit}
               </TableCell>
-              <TableCell>{item.destination}</TableCell>
+              <TableCell>{item.issuedTo}</TableCell>
+              <TableCell>{item.purpose}</TableCell>
               <TableCell>{item.date}</TableCell>
               <TableCell>
                 <span
@@ -85,8 +91,9 @@ export default function OutwardTable() {
               <TableCell className="text-right">
                 <OutwardActions
                   item={item}
-                  onEdit={(updated) => handleEdit(item.id, updated)}
-                  onDelete={(id: number) => handleDelete(id)}
+                  onEdit={(u) => handleEdit(item.id, u)}
+                  onDelete={() => handleDelete(item.id)}
+                  onQr={() => handleQr(item.id)}
                 />
               </TableCell>
             </TableRow>

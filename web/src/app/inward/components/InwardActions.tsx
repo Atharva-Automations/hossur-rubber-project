@@ -33,8 +33,10 @@ export default function InwardActions({ item, onEdit }: any) {
       {/* QR Print */}
       <Button
         variant="outline"
-        size="icon"
-        className="hover:bg-blue-50"
+        disabled={item.status === 'Expired'}
+        title={
+          item.status === 'Expired' ? 'Cannot print for expired batch' : ''
+        }
         onClick={() => setOpenQR(true)}
       >
         <QrCode className="w-4 h-4" />
@@ -73,7 +75,7 @@ export default function InwardActions({ item, onEdit }: any) {
 
       {/* Delete Confirmation */}
       <AlertDialog open={openDeleteConfirm} onOpenChange={setOpenDeleteConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-white text-gray-800 shadow-xl rounded-md">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this material entry?</AlertDialogTitle>
             <p className="text-sm text-gray-500 mt-2">

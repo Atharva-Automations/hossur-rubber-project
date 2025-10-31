@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum QrState {
+  CREATED      // 1 – printed & in inventory (after inward)
+  ISSUED       // 2 – scanned for outward, leaving inventory
+  CONSUMED     // 3 – scanned at production/bin
+}
+
 // ─────────────────────────────────────────────
 // InwardEntry  — main batch-level record
 // ─────────────────────────────────────────────
@@ -32,13 +38,21 @@ model InwardEntry {
 // ─────────────────────────────────────────────
 model InwardQrCode {
   id         Int       @id @default(autoincrement())
+  qrId       String      @unique
   bagNo      Int
   label      String
-  qrId       String
+
   inwardId   Int
   inward     InwardEntry @relation(fields: [inwardId], references: [id], onDelete: Cascade)
-  printed    Boolean     @default(false)
-  createdAt  DateTime    @default(now())
+
+  state      QrState   @default(CREATED)
+  outwardId  Int?      
+  printed    Boolean   @default(false)
+  scannedAtOutward DateTime?
+  scannedAtProduction DateTime?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
 }
 
 // ─────────────────────────────────────────────
@@ -48,15 +62,20 @@ model OutwardEntry {
   id             Int       @id @default(autoincrement())
   materialName   String
   quantity       Float
-  unit           String    @default("KG")
+  unit           String     @default("KG")
 
-  bagsIssued     Int?                // no. of bags issued
-  status         String    @default("Pending") // Pending → Completed
-  qrScanStatus   Json?               // track each bag: scanned / not-scanned
+  issuedTo       String
+  purpose        String?
+  remarks        String?
 
-  date           DateTime  @default(now())
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  qrScanStatus   Json?
+  status         String     @default("Pending")
+
+  bagsIssued     Int?
+
+  date           DateTime   @default(now())
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 }
 
 // ─────────────────────────────────────────────

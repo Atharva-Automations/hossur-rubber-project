@@ -21,9 +21,9 @@ export class InwardService {
   }
 
   async create(dto: CreateInwardDto) {
-    const mfg = new Date(dto.mfgDate);
-    const exp = new Date(dto.expDate);
-    const status = this.computeStatus(exp);
+    // const mfg = new Date(dto.mfgDate);
+    // const exp = new Date(dto.expDate);
+    // const status = this.computeStatus(exp);
 
     // Inside create()
     const inward = await this.prisma.inwardEntry.create({
@@ -31,7 +31,7 @@ export class InwardService {
         materialName: dto.materialName.trim(),
         supplierName: dto.supplierName.trim(),
         quantity: dto.quantity,
-        unit: dto.unit, // 👈 Added here
+        unit: dto.unit,
         bagWeight: dto.bagWeight ?? null,
         storedAsWhole: dto.storedAsWhole ?? false,
         mfgDate: new Date(dto.mfgDate),
@@ -45,7 +45,12 @@ export class InwardService {
     const qrList = this.buildQrList(inward);
     if (qrList.length) {
       await this.prisma.inwardQrCode.createMany({
-        data: qrList.map((qr) => ({ ...qr, inwardId: inward.id })),
+        data: qrList.map((qr) => ({
+          ...qr,
+          inwardId: inward.id,
+          state: 'CREATED',
+          printed: false,
+        })),
       });
     }
 
@@ -287,5 +292,24 @@ export class InwardService {
       },
       orderBy: { createdAt: sort },
     });
+  }
+
+  async getMaterials() {
+    const rows = await this.prisma.inwardEntry.findMany({
+      distinct: ['materialName'],
+      select: { materialName: true },
+      orderBy: { materialName: 'asc' },
+    });
+    // Return array of strings
+    return rows.map((r) => r.materialName);
+  }
+
+  async getSuppliers() {
+    const rows = await this.prisma.inwardEntry.findMany({
+      distinct: ['supplierName'],
+      select: { supplierName: true },
+      orderBy: { supplierName: 'asc' },
+    });
+    return rows.map((r) => r.supplierName);
   }
 }
