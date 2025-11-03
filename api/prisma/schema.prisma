@@ -119,7 +119,7 @@ model Ingredient {
 // ─────────────────────────────────────────────
 model BinAssignment {
   id              Int        @id @default(autoincrement())
-  binNumber       Int        @unique
+  binNumber       String     @unique
   ingredientId    Int        @unique
   ingredient      Ingredient @relation(fields: [ingredientId], references: [id])
   minQuantity     Float

@@ -1,22 +1,36 @@
-import { Controller, Get, Post, Body, Delete, Param } from '@nestjs/common';
-import { BinsService } from './bins.service';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Post,
+  Patch,
+} from '@nestjs/common';
+import { BinService } from './bins.service';
 
 @Controller('bins')
-export class BinsController {
-  constructor(private readonly binsService: BinsService) {}
+export class BinController {
+  constructor(private readonly binService: BinService) {}
 
   @Post()
-  assignBin(@Body() data: any) {
-    return this.binsService.assignBin(data);
+  create(@Body() body: any) {
+    return this.binService.create(body);
   }
 
   @Get()
   findAll() {
-    return this.binsService.findAll();
+    return this.binService.findAll();
+  }
+
+  @Patch(':id')
+  update(@Param('id', ParseIntPipe) id: number, @Body() body: any) {
+    return this.binService.update(id, body);
   }
 
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.binsService.delete(+id);
+  delete(@Param('id', ParseIntPipe) id: number) {
+    return this.binService.delete(id);
   }
 }
