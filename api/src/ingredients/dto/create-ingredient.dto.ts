@@ -1,16 +1,20 @@
-// import { IsBoolean, IsInt, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IngredientType } from '@prisma/client';
 
-// export class CreateIngredientDto {
-//   @IsString() name!: string;
-//   @IsInt()    typeId!: number;
+export class CreateIngredientDto {
+  @IsString()
+  @IsNotEmpty()
+  ingredientCode!: string;
 
-//   @IsOptional() @IsString() binNo?: string;
-//   @IsOptional() @IsString() unitSmall?: string;
-//   @IsOptional() @IsString() unitBig?: string;
+  @IsString()
+  @IsOptional()
+  name?: string;
 
-//   @IsOptional() @IsNumber() minQty?: number;
-//   @IsOptional() @IsNumber() maxQty?: number;
-//   @IsOptional() @IsNumber() curQty?: number;
+  @IsEnum(IngredientType, { message: 'Invalid ingredient type' })
+  @IsNotEmpty()
+  type!: IngredientType;
 
-//   @IsOptional() @IsBoolean() active?: boolean;
-// }
+  @IsString()
+  @IsNotEmpty()
+  materialName!: string;
+}

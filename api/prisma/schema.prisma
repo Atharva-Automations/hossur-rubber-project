@@ -8,84 +8,123 @@ datasource db {
 }
 
 enum QrState {
-  CREATED      // 1 – printed & in inventory (after inward)
-  ISSUED       // 2 – scanned for outward, leaving inventory
-  CONSUMED     // 3 – scanned at production/bin
+  CREATED // 1 – printed & in inventory (after inward)
+  ISSUED // 2 – scanned for outward, leaving inventory
+  CONSUMED // 3 – scanned at production/bin
+}
+
+enum IngredientType {
+  BASE_POLYMER
+  FILLER
+  ACTIVATOR
+  ACCELERATOR
+  CURING_AGENT
+  PROCESSING_AID
+  PIGMENT
+  OTHER
 }
 
 // ─────────────────────────────────────────────
 // InwardEntry  — main batch-level record
 // ─────────────────────────────────────────────
 model InwardEntry {
-  id             Int             @id @default(autoincrement())
-  materialName   String
-  supplierName   String
-  quantity       Float
-  unit           String          
-  bagWeight      Float?
-  storedAsWhole  Boolean          @default(false)
-  mfgDate        DateTime
-  expDate        DateTime
-  status         String
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  qrCodes        InwardQrCode[]
+  id            Int            @id @default(autoincrement())
+  materialName  String
+  supplierName  String
+  quantity      Float
+  unit          String
+  bagWeight     Float?
+  storedAsWhole Boolean        @default(false)
+  mfgDate       DateTime
+  expDate       DateTime
+  status        String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  qrCodes       InwardQrCode[]
 }
-
 
 // ─────────────────────────────────────────────
 // InwardQrCode  — one record per bag
 // ─────────────────────────────────────────────
 model InwardQrCode {
-  id         Int       @id @default(autoincrement())
-  qrId       String      @unique
-  bagNo      Int
-  label      String
+  id    Int    @id @default(autoincrement())
+  qrId  String @unique
+  bagNo Int
+  label String
 
-  inwardId   Int
-  inward     InwardEntry @relation(fields: [inwardId], references: [id], onDelete: Cascade)
+  inwardId Int
+  inward   InwardEntry @relation(fields: [inwardId], references: [id], onDelete: Cascade)
 
-  state      QrState   @default(CREATED)
-  outwardId  Int?      
-  printed    Boolean   @default(false)
-  scannedAtOutward DateTime?
+  state               QrState   @default(CREATED)
+  outwardId           Int?
+  printed             Boolean   @default(false)
+  scannedAtOutward    DateTime?
   scannedAtProduction DateTime?
 
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @default(now()) @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 }
 
 // ─────────────────────────────────────────────
 // Outward Entries — issuing materials for production
 // ─────────────────────────────────────────────
 model OutwardEntry {
-  id             Int       @id @default(autoincrement())
-  materialName   String
-  quantity       Float
-  unit           String     @default("KG")
+  id           Int    @id @default(autoincrement())
+  materialName String
+  quantity     Float
+  unit         String @default("KG")
 
-  issuedTo       String
-  purpose        String?
-  remarks        String?
+  issuedTo String
+  purpose  String?
+  remarks  String?
 
-  qrScanStatus   Json?
-  status         String     @default("Pending")
+  qrScanStatus Json?
+  status       String @default("Pending")
 
-  bagsIssued     Int?
+  bagsIssued Int?
 
-  date           DateTime   @default(now())
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ─────────────────────────────────────────────
 // Material Stock — live quantity summary
 // ─────────────────────────────────────────────
 model MaterialStock {
-  id             Int      @id @default(autoincrement())
-  materialName   String   @unique
-  totalQuantity  Float
-  unit           String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  materialName  String   @unique
+  totalQuantity Float
+  unit          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// Ingredient — defines a material-ingredient link
+// ─────────────────────────────────────────────
+model Ingredient {
+  id             Int             @id @default(autoincrement())
+  ingredientCode String          @unique
+  name           String?
+  type           IngredientType
+  materialName   String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  bins           BinAssignment[]
+}
+
+// ─────────────────────────────────────────────
+// Bin Assignment — maps ingredient to a bin
+// ─────────────────────────────────────────────
+model BinAssignment {
+  id              Int        @id @default(autoincrement())
+  binNumber       Int        @unique
+  ingredientId    Int        @unique
+  ingredient      Ingredient @relation(fields: [ingredientId], references: [id])
+  minQuantity     Float
+  maxQuantity     Float
+  currentQuantity Float      @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 }

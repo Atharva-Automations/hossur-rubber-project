@@ -1,34 +1,51 @@
-// import { Injectable, NotFoundException } from '@nestjs/common';
-// import { PrismaService } from '../prisma/prisma.service';
-// import { CreateIngredientDto } from './dto/create-ingredient.dto';
-// import { UpdateIngredientDto } from './dto/update-ingredient.dto';
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateIngredientDto } from './dto/create-ingredient.dto';
 
-// @Injectable()
-// export class IngredientsService {
-//   constructor(private prisma: PrismaService) {}
+@Injectable()
+export class IngredientService {
+  constructor(private prisma: PrismaService) {}
 
-//   create(data: CreateIngredientDto) {
-//     return this.prisma.ingredient.create({ data });
-//   }
+  async create(data: CreateIngredientDto) {
+    const { ingredientCode, materialName, type } = data;
 
-//   findAll() {
-//     return this.prisma.ingredient.findMany({ orderBy: { id: 'desc' } });
-//   }
+    // Prevent duplicate material assignment
+    const existing = await this.prisma.ingredient.findFirst({
+      where: { materialName },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        `Material "${materialName}" is already assigned to an ingredient.`
+      );
+    }
 
-//   async findOne(id: number) {
-//     const item = await this.prisma.ingredient.findUnique({ where: { id } });
-//     if (!item) throw new NotFoundException('Ingredient not found');
-//     return item;
-//   }
+    return this.prisma.ingredient.create({ data });
+  }
 
-//   async update(id: number, data: UpdateIngredientDto) {
-//     await this.findOne(id); // ensures 404 if missing
-//     return this.prisma.ingredient.update({ where: { id }, data });
-//   }
+  async findAll() {
+    return this.prisma.ingredient.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        bins: {
+          select: {
+            id: true,
+            binNumber: true,
+            minQuantity: true,
+            maxQuantity: true,
+            currentQuantity: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+  }
 
-//   async remove(id: number) {
-//     await this.findOne(id);
-//     await this.prisma.ingredient.delete({ where: { id } });
-//     return { ok: true };
-//   }
-// }
+  async findOne(id: number) {
+    return this.prisma.ingredient.findUnique({ where: { id } });
+  }
+
+  async delete(id: number) {
+    return this.prisma.ingredient.delete({ where: { id } });
+  }
+}
