@@ -23,18 +23,15 @@ export class InwardController {
     return this.inwardService.create(dto);
   }
 
-  // ✅ Combined findAll + filtered route (replaces duplicate)
   @Get()
   findAll(
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('sort') sort?: 'asc' | 'desc'
   ) {
-    // If any filter is present, use filtered logic
     if (search || status || sort) {
       return this.inwardService.findAllFiltered(search, status, sort);
     }
-    // Otherwise, return all
     return this.inwardService.findAll();
   }
 
@@ -56,6 +53,11 @@ export class InwardController {
   @Get('suppliers')
   async getSuppliers() {
     return this.inwardService.getSuppliers();
+  }
+
+  @Get('available-bags/:material')
+  async getAvailableBags(@Param('material') material: string) {
+    return this.inwardService.getAvailableBags(material);
   }
 
   @Get(':id')

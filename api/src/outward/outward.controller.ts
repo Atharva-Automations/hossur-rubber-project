@@ -2,23 +2,19 @@ import {
   Controller,
   Get,
   Post,
-  Patch,
-  Delete,
-  Param,
   Body,
+  Param,
   ParseIntPipe,
 } from '@nestjs/common';
 import { OutwardService } from './outward.service';
-import { CreateOutwardDto } from './dto/create-outward.dto';
-import { UpdateOutwardDto } from './dto/update-outward.dto';
 
 @Controller('outward')
 export class OutwardController {
   constructor(private readonly outwardService: OutwardService) {}
 
   @Post()
-  create(@Body() dto: CreateOutwardDto) {
-    return this.outwardService.create(dto);
+  create(@Body() data: any) {
+    return this.outwardService.create(data);
   }
 
   @Get()
@@ -26,30 +22,18 @@ export class OutwardController {
     return this.outwardService.findAll();
   }
 
+  @Get('/analytics')
+  async getAnalytics() {
+    return this.outwardService.getAnalytics();
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.outwardService.findOne(id);
   }
 
-  @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateOutwardDto) {
-    return this.outwardService.update(id, dto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.outwardService.remove(id);
-  }
-
-  // QR Scan endpoint
-  @Post(':id/scan')
-  scanQr(@Param('id', ParseIntPipe) id: number, @Body('qrId') qrId: string) {
-    return this.outwardService.scanQr(id, qrId);
-  }
-
-  // Mark completed
-  @Patch(':id/complete')
-  complete(@Param('id', ParseIntPipe) id: number) {
-    return this.outwardService.complete(id);
+  @Post('scan-qr')
+  async scanQr(@Body() body: { outwardId: number; qrId: string }) {
+    return this.outwardService.scanQr(body.outwardId, body.qrId);
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useOutwardList } from '@/hooks/useOutwards';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -10,46 +11,16 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import OutwardActions from './OutwardActions';
-
-const sampleData = [
-  {
-    id: 1,
-    materialName: 'Zinc Oxide',
-    quantity: 100,
-    unit: 'KG',
-    issuedTo: 'Mixing Line 1',
-    purpose: 'Production',
-    date: '2025-10-29',
-    status: 'Completed',
-  },
-  {
-    id: 2,
-    materialName: 'Carbon Black',
-    quantity: 50,
-    unit: 'KG',
-    issuedTo: 'Line 2',
-    purpose: 'Trial',
-    date: '2025-10-28',
-    status: 'Pending',
-  },
-];
+import { QrCode } from 'lucide-react';
+import ScanQrModal from './ScanQrModal';
+import { useState } from 'react';
 
 export default function OutwardTable() {
-  const [data, setData] = useState(sampleData);
+  const { data = [], isLoading } = useOutwardList();
+  const [openScan, setOpenScan] = useState(false);
+  const [selectedOutward, setSelectedOutward] = useState<number | null>(null);
 
-  const handleEdit = (id: number, updated: any) => {
-    setData(
-      data.map((item) => (item.id === id ? { ...item, ...updated } : item))
-    );
-  };
-
-  const handleDelete = (id: number) => {
-    setData(data.filter((item) => item.id !== id));
-  };
-
-  const handleQr = (id: number) => {
-    console.log('Show QR for outward entry', id);
-  };
+  if (isLoading) return <p>Loading Outward Entries...</p>;
 
   return (
     <div className="bg-white rounded-lg shadow-sm border p-4 overflow-x-auto">
@@ -59,24 +30,26 @@ export default function OutwardTable() {
             <TableHead>ID</TableHead>
             <TableHead>Material</TableHead>
             <TableHead>Quantity</TableHead>
+            <TableHead>No. of Bags</TableHead>
             <TableHead>Issued To</TableHead>
-            <TableHead>Purpose</TableHead>
             <TableHead>Date</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.map((item) => (
+          {data.map((item: any) => (
             <TableRow key={item.id}>
               <TableCell>{item.id}</TableCell>
               <TableCell>{item.materialName}</TableCell>
               <TableCell>
                 {item.quantity} {item.unit}
               </TableCell>
+              <TableCell>{item.qrScanStatus?.totalBags || '-'}</TableCell>
               <TableCell>{item.issuedTo}</TableCell>
-              <TableCell>{item.purpose}</TableCell>
-              <TableCell>{item.date}</TableCell>
+              <TableCell>
+                {new Date(item.createdAt).toLocaleDateString('en-GB')}
+              </TableCell>
               <TableCell>
                 <span
                   className={`px-2 py-1 text-xs rounded-full ${
@@ -89,17 +62,37 @@ export default function OutwardTable() {
                 </span>
               </TableCell>
               <TableCell className="text-right">
-                <OutwardActions
-                  item={item}
-                  onEdit={(u) => handleEdit(item.id, u)}
-                  onDelete={() => handleDelete(item.id)}
-                  onQr={() => handleQr(item.id)}
-                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => {
+                      setSelectedOutward(item.id);
+                      setOpenScan(true);
+                    }}
+                    title="Scan QR"
+                  >
+                    <QrCode className="h-4 w-4 text-blue-600" />
+                  </Button>
+                  <OutwardActions
+                    item={item}
+                    onEdit={() => {}}
+                    onDelete={() => {}}
+                  />
+                </div>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+
+      {selectedOutward && (
+        <ScanQrModal
+          outwardId={selectedOutward}
+          open={openScan}
+          onClose={setOpenScan}
+        />
+      )}
     </div>
   );
 }

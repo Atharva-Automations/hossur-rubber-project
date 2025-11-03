@@ -312,4 +312,24 @@ export class InwardService {
     });
     return rows.map((r) => r.supplierName);
   }
+
+  async getAvailableBags(material: string) {
+    return this.prisma.inwardQrCode.findMany({
+      where: {
+        inward: { materialName: material },
+        state: 'CREATED', // only available (not issued or consumed)
+      },
+      select: {
+        qrId: true,
+        bagNo: true,
+        inward: {
+          select: {
+            bagWeight: true,
+            unit: true,
+          },
+        },
+      },
+      orderBy: { bagNo: 'asc' },
+    });
+  }
 }
