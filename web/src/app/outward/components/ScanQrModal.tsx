@@ -31,17 +31,20 @@ export default function ScanQrModal({
     if (!qrInput.trim()) {
       toast({
         title: 'Missing Input',
-        description: 'Please enter or scan a QR ID.',
+        description: 'Please enter or scan a QR ID before submitting.',
+        variant: 'destructive',
       });
       return;
     }
 
     try {
       setLoading(true);
+
       const res = await api.post('/outward/scan-qr', {
         outwardId,
         qrId: qrInput.trim(),
       });
+
       const { message, scannedBags, totalBags, status } = res.data;
 
       setScannedCount(scannedBags);
@@ -56,10 +59,24 @@ export default function ScanQrModal({
         setTimeout(() => onClose(false), 1200);
       }
     } catch (error: any) {
+      // 🧠 Smart error interpretation for better user messages
+      const errMsg = error.response?.data?.message?.toLowerCase() || '';
+
+      let userMessage = 'Unexpected error occurred. Please try again.';
+      if (errMsg.includes('not found'))
+        userMessage = '❌ Wrong QR ID – no such bag exists.';
+      else if (errMsg.includes('already issued'))
+        userMessage = '⚠️ This bag is already scanned.';
+      else if (errMsg.includes('consumed'))
+        userMessage = '⚠️ This bag is already used in production.';
+      else if (errMsg.includes('belongs to'))
+        userMessage = '⚠️ This QR belongs to a different material.';
+      else if (errMsg.includes('invalid qr'))
+        userMessage = '❌ Invalid or unreadable QR code.';
+
       toast({
         title: 'Scan Error',
-        description:
-          error.response?.data?.message || 'Invalid QR or mismatch material.',
+        description: userMessage,
         variant: 'destructive',
       });
     } finally {
