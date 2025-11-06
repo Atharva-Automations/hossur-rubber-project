@@ -2,22 +2,28 @@
 
 import { useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectTrigger,
-  SelectValue,
   SelectContent,
   SelectItem,
+  SelectValue,
 } from '@/components/ui/select';
+// import { useIngredients } from '@/hooks/useIngredients';
+import { useBins } from '@/hooks/useBins';
+import { useAssignBin } from '@/hooks/useAssignBins';
 import { toast } from '@/components/ui/use-toast';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '@/lib/api';
+import { useUnassignedIngredients } from '@/hooks/useUnassignedIngredients';
 
-export default function BinAssignmentPage() {
-  const qc = useQueryClient();
+export default function AssignBinPage() {
+  const { data: allBins = [] } = useBins();
+  // const { data: ingredients = [] } = useIngredients();
+  const { mutateAsync: assignBin, isPending } = useAssignBin();
+  const { data: availableIngredients = [] } = useUnassignedIngredients();
+
   const [form, setForm] = useState({
     binNumber: '',
     ingredientId: '',
@@ -25,117 +31,160 @@ export default function BinAssignmentPage() {
     maxQuantity: '',
   });
 
-  const { data: ingredients = [] } = useQuery({
-    queryKey: ['ingredients'],
-    queryFn: async () => (await api.get('/ingredients')).data,
-  });
+  const [errors, setErrors] = useState<{
+    minQuantity?: string;
+    maxQuantity?: string;
+  }>({});
 
-  //   const { data: bins = [] } = useQuery({
-  //     queryKey: ['bins'],
-  //     queryFn: async () => (await api.get('/bins')).data,
-  //   });
+  // Filter unassigned bins and ingredients
+  const availableBins = allBins.filter((b: any) => !b.ingredientId);
+  // const availableIngredients = ingredients.filter((i: any) => !i.binAssignment);
 
-  const createBin = useMutation({
-    mutationFn: async () => {
-      const payload = {
-        ...form,
+  const handleSubmit = async () => {
+    const newErrors: typeof errors = {};
+    if (!form.binNumber || !form.ingredientId) {
+      toast({
+        title: 'Missing Fields',
+        description: 'Please select bin and ingredient.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!form.minQuantity || Number(form.minQuantity) <= 0)
+      newErrors.minQuantity = 'Minimum quantity must be greater than 0.';
+    if (
+      !form.maxQuantity ||
+      Number(form.maxQuantity) <= Number(form.minQuantity)
+    )
+      newErrors.maxQuantity = 'Max quantity must be greater than Min quantity.';
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    try {
+      await assignBin({
+        binNumber: form.binNumber,
         ingredientId: Number(form.ingredientId),
         minQuantity: Number(form.minQuantity),
         maxQuantity: Number(form.maxQuantity),
-      };
-      return await api.post('/bins', payload);
-    },
-    onSuccess: () => {
-      toast({ title: 'Bin assigned successfully ✅' });
-      qc.invalidateQueries({ queryKey: ['bins'] });
+      });
+
+      toast({ title: 'Success', description: 'Bin assigned successfully!' });
       setForm({
         binNumber: '',
         ingredientId: '',
         minQuantity: '',
         maxQuantity: '',
       });
-    },
-    onError: (err: any) => {
+      setErrors({});
+    } catch (err: any) {
       toast({
-        title: 'Error assigning bin',
-        description: err.response?.data?.message || 'Something went wrong',
+        title: 'Error',
+        description: err.response?.data?.message || 'Failed to assign bin.',
         variant: 'destructive',
       });
-    },
-  });
-
-  const unassignedIngredients = ingredients.filter(
-    (i: any) => i.bins.length === 0
-  );
-
-  const handleChange = (key: string, value: any) =>
-    setForm((p) => ({ ...p, [key]: value }));
+    }
+  };
 
   return (
     <DashboardLayout>
-      <div className="bg-white p-6 rounded-lg shadow max-w-3xl mx-auto">
+      <div className="max-w-2xl mx-auto bg-white p-6 shadow-sm rounded-lg">
         <h2 className="text-2xl font-semibold mb-4">
           Assign Bin to Ingredient
         </h2>
 
-        <div className="space-y-4">
-          <div>
-            <Label>Bin Number</Label>
-            <Input
-              value={form.binNumber}
-              onChange={(e) => handleChange('binNumber', e.target.value)}
-            />
-          </div>
-
-          <div>
-            <Label>Select Ingredient</Label>
-            <Select
-              value={form.ingredientId}
-              onValueChange={(v) => handleChange('ingredientId', v)}
-            >
-              <SelectTrigger className="bg-white mt-1">
-                <SelectValue placeholder="Select ingredient" />
-              </SelectTrigger>
-              <SelectContent className="bg-white">
-                {unassignedIngredients.map((i: any) => (
-                  <SelectItem key={i.id} value={String(i.id)}>
-                    {i.ingredientCode} — {i.materialName}
+        {/* Bin Number */}
+        <div className="mb-4">
+          <Label>Bin Number</Label>
+          <Select
+            value={form.binNumber}
+            onValueChange={(v) =>
+              setForm((prev) => ({ ...prev, binNumber: v }))
+            }
+          >
+            <SelectTrigger className="bg-white mt-1">
+              <SelectValue placeholder="Select Bin" />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              {availableBins.length === 0 ? (
+                <SelectItem value="none" disabled>
+                  All bins assigned
+                </SelectItem>
+              ) : (
+                availableBins.map((b: string) => (
+                  <SelectItem key={b} value={b}>
+                    {b}
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Min Quantity</Label>
-              <Input
-                type="number"
-                value={form.minQuantity}
-                onChange={(e) => handleChange('minQuantity', e.target.value)}
-              />
-            </div>
-            <div>
-              <Label>Max Quantity</Label>
-              <Input
-                type="number"
-                value={form.maxQuantity}
-                onChange={(e) => handleChange('maxQuantity', e.target.value)}
-              />
-            </div>
-          </div>
+        {/* Ingredient */}
+        <div className="mb-4">
+          <Label>Select Ingredient</Label>
+          <Select
+            value={form.ingredientId}
+            onValueChange={(v) =>
+              setForm((prev) => ({ ...prev, ingredientId: v }))
+            }
+          >
+            <SelectTrigger className="bg-white mt-1">
+              <SelectValue placeholder="Select ingredient" />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              {availableIngredients.length === 0 ? (
+                <SelectItem value="none" disabled>
+                  All ingredients assigned
+                </SelectItem>
+              ) : (
+                availableIngredients.map((i: any) => (
+                  <SelectItem key={i.id} value={i.id.toString()}>
+                    {i.ingredientCode} — {i.name || i.materialName}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
 
-          <div className="flex justify-end">
-            <Button
-              onClick={() => createBin.mutate()}
-              disabled={createBin.isPending}
-            >
-              {createBin.isPending ? 'Assigning...' : 'Assign Bin'}
-            </Button>
+        {/* Quantities */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <Label>Min Quantity</Label>
+            <Input
+              type="number"
+              value={form.minQuantity}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, minQuantity: e.target.value }))
+              }
+            />
+            {errors.minQuantity && (
+              <p className="text-xs text-red-500 mt-1">{errors.minQuantity}</p>
+            )}
+          </div>
+          <div>
+            <Label>Max Quantity</Label>
+            <Input
+              type="number"
+              value={form.maxQuantity}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, maxQuantity: e.target.value }))
+              }
+            />
+            {errors.maxQuantity && (
+              <p className="text-xs text-red-500 mt-1">{errors.maxQuantity}</p>
+            )}
           </div>
         </div>
 
-        {/* ✅ Bin List */}
+        <div className="flex justify-end">
+          <Button onClick={handleSubmit} disabled={isPending}>
+            {isPending ? 'Assigning...' : 'Assign Bin'}
+          </Button>
+        </div>
       </div>
     </DashboardLayout>
   );

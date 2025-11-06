@@ -21,10 +21,6 @@ export class InwardService {
   }
 
   async create(dto: CreateInwardDto) {
-    // const mfg = new Date(dto.mfgDate);
-    // const exp = new Date(dto.expDate);
-    // const status = this.computeStatus(exp);
-
     // Inside create()
     const inward = await this.prisma.inwardEntry.create({
       data: {

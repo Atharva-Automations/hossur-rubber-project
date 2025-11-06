@@ -6,7 +6,7 @@ export class ProductionController {
   constructor(private readonly productionService: ProductionService) {}
 
   @Post('scan-qr')
-  async scanQr(@Body() body: { qrId: string }) {
-    return this.productionService.scanAtProduction(body.qrId);
+  async scanQr(@Body('qrId') qrId: string) {
+    return this.productionService.scanQr(qrId);
   }
 }

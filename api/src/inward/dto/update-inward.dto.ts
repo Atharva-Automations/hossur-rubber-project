@@ -1,4 +1,4 @@
-// api/src/inward/dto/update-inward.dto.ts
+// src/inward/dto/update-inward.dto.ts
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateInwardDto } from './create-inward.dto';
 

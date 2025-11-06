@@ -1,15 +1,8 @@
-import { IsString, IsNumber, IsOptional } from 'class-validator';
+// src/outward/dto/create-outward.dto.ts
+import { BaseDto } from '../../common/dto/base.dto';
+import { IsString, IsOptional } from 'class-validator';
 
-export class CreateOutwardDto {
-  @IsString()
-  materialName!: string;
-
-  @IsNumber()
-  quantity!: number;
-
-  @IsString()
-  unit!: string;
-
+export class CreateOutwardDto extends BaseDto {
   @IsString()
   issuedTo!: string;
 

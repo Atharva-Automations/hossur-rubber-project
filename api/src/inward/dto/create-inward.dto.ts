@@ -1,25 +1,21 @@
+// src/inward/dto/create-inward.dto.ts
+import { BaseDto } from '../../common/dto/base.dto';
 import {
   IsString,
-  IsNumber,
-  IsBoolean,
   IsOptional,
+  IsBoolean,
   IsDateString,
+  IsNumber,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
-export class CreateInwardDto {
-  @IsString()
-  materialName!: string;
-
+export class CreateInwardDto extends BaseDto {
   @IsString()
   supplierName!: string;
 
   @Type(() => Number)
   @IsNumber()
-  quantity!: number;
-
-  @IsString()
-  unit!: string; // 👈 Added unit
+  quantity!: number; // Override for stricter validation
 
   @IsOptional()
   @Type(() => Number)

@@ -7,13 +7,14 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { OutwardService } from './outward.service';
+import { CreateOutwardDto } from './dto/create-outward.dto';
 
 @Controller('outward')
 export class OutwardController {
   constructor(private readonly outwardService: OutwardService) {}
 
   @Post()
-  create(@Body() data: any) {
+  create(@Body() data: CreateOutwardDto) {
     return this.outwardService.create(data);
   }
 

@@ -9,6 +9,9 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/hooks/use-toast';
+import api from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
 import { useProductionScan } from '@/hooks/useProductionScan';
 
 export default function ProductionScanModal({
@@ -23,19 +26,42 @@ export default function ProductionScanModal({
     message: string;
     type: 'success' | 'error';
   } | null>(null);
+
+  const queryClient = useQueryClient();
   const { mutateAsync: scanQr, isPending } = useProductionScan();
 
   const handleScan = async () => {
     if (!qrId.trim()) return;
 
     try {
-      const res = await scanQr(qrId.trim());
-      setResult({ message: res.message, type: 'success' });
+      const res = await api.post('/production/scan-qr', { qrId: qrId.trim() });
+
+      toast({
+        title: 'Scan Successful',
+        description: res.data.message,
+      });
+
+      setResult({
+        message: res.data.message,
+        type: 'success',
+      });
+
       setQrId('');
+      queryClient.invalidateQueries({ queryKey: ['bin-status'] }); // ✅ Refresh Bin Status instantly
     } catch (err: any) {
-      const message =
-        err.response?.data?.message || 'Failed to scan QR for production.';
-      setResult({ message, type: 'error' });
+      const errorMsg =
+        err.response?.data?.message || 'Failed to process scanned QR.';
+
+      toast({
+        title: 'Scan Error',
+        description: errorMsg,
+        variant: 'destructive',
+      });
+
+      setResult({
+        message: errorMsg,
+        type: 'error',
+      });
     }
   };
 
@@ -56,7 +82,7 @@ export default function ProductionScanModal({
             disabled={isPending}
           />
 
-          {/* Feedback Messages */}
+          {/* ✅ Feedback message */}
           {result && (
             <div
               className={`text-sm px-3 py-2 rounded-md ${

@@ -9,6 +9,7 @@ import {
   Patch,
 } from '@nestjs/common';
 import { BinService } from './bins.service';
+import { AssignBinDto } from './dto/assign-bin.dto';
 
 @Controller('bins')
 export class BinController {
@@ -19,9 +20,29 @@ export class BinController {
     return this.binService.create(body);
   }
 
+  @Post('assign')
+  async assignBin(@Body() dto: AssignBinDto) {
+    return this.binService.assignBin(dto);
+  }
+
   @Get()
-  findAll() {
-    return this.binService.findAll();
+  async getAllBins() {
+    return this.binService.getAllBins();
+  }
+
+  @Get('available')
+  async getAvailableBins() {
+    return this.binService.getAvailableBins();
+  }
+
+  @Get('unassigned-ingredients')
+  async getUnassignedIngredients() {
+    return this.binService.getUnassignedIngredients();
+  }
+
+  @Get('status')
+  async getBinStatus() {
+    return this.binService.getBinStatus();
   }
 
   @Patch(':id')
