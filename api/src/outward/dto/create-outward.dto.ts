@@ -1,16 +1,43 @@
 // src/outward/dto/create-outward.dto.ts
-import { BaseDto } from '../../common/dto/base.dto';
-import { IsString, IsOptional } from 'class-validator';
 
-export class CreateOutwardDto extends BaseDto {
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsArray,
+  IsNotEmpty,
+} from 'class-validator';
+
+export class CreateOutwardDto {
   @IsString()
+  @IsNotEmpty()
+  materialName!: string;
+
+  @IsNumber()
+  @IsNotEmpty()
+  quantity!: number;
+
+  @IsString()
+  @IsOptional()
+  unit?: string = 'KG';
+
+  @IsString()
+  @IsNotEmpty()
   issuedTo!: string;
 
-  @IsOptional()
   @IsString()
-  purpose?: string;
+  @IsOptional()
+  purpose?: string = 'Production';
 
-  @IsOptional()
   @IsString()
+  @IsOptional()
   remarks?: string;
+
+  @IsArray()
+  @IsNotEmpty()
+  selectedQrIds!: string[];
+
+  @IsString()
+  @IsOptional()
+  status?: string = 'Pending';
 }

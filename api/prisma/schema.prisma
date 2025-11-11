@@ -24,6 +24,11 @@ enum IngredientType {
   OTHER
 }
 
+enum StepType {
+  KNEADER
+  MIXING
+}
+
 // ─────────────────────────────────────────────
 // InwardEntry  — main batch-level record
 // ─────────────────────────────────────────────
@@ -104,14 +109,15 @@ model MaterialStock {
 // Ingredient — defines a material-ingredient link
 // ─────────────────────────────────────────────
 model Ingredient {
-  id             Int             @id @default(autoincrement())
-  ingredientCode String          @unique
+  id             Int              @id @default(autoincrement())
+  ingredientCode String           @unique
   name           String?
   type           IngredientType
   materialName   String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
   bins           BinAssignment[]
+  recipeLinks    StepIngredient[]
 }
 
 // ─────────────────────────────────────────────
@@ -127,4 +133,52 @@ model BinAssignment {
   currentQuantity Float      @default(0)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// Recipe creation - recipe details
+// ─────────────────────────────────────────────
+model Recipe {
+  id          Int      @id @default(autoincrement())
+  recipeCode  String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  steps RecipeStep[]
+}
+
+// ─────────────────────────────────────────────
+// Recipe steps details - each step details
+// ─────────────────────────────────────────────
+model RecipeStep {
+  id       Int    @id @default(autoincrement())
+  recipeId Int
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  stepType       StepType
+  sequenceNumber Int
+  timerSeconds   Int
+  pressure       Float
+  temperature    Float
+  rpm            Float
+
+  ingredients StepIngredient[]
+}
+
+// ─────────────────────────────────────────────
+// Ingredient details - maps ingredient to each step
+// ─────────────────────────────────────────────
+model StepIngredient {
+  id     Int        @id @default(autoincrement())
+  stepId Int
+  step   RecipeStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  ingredientId Int
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+
+  quantity Float
+  unit     String
 }

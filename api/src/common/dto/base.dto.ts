@@ -1,4 +1,3 @@
-// src/common/dto/base.dto.ts
 import { IsString, IsNumber, IsOptional, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
 

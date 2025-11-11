@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { cn } from '@/lib/utils';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Package,
   Box,
@@ -15,19 +15,25 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-} from "lucide-react";
-import { useState } from "react";
+  Computer,
+  Scroll,
+  ScanQrCode,
+} from 'lucide-react';
+import { useState } from 'react';
 
 const navItems = [
-  { name: "Inward", path: "/inward", icon: Package },
-  { name: "Outward", path: "/outward", icon: Box },
-  { name: "Inventory", path: "/inventory", icon: Warehouse },
-  { name: "Ingredients", path: "/ingredients", icon: FlaskConical },
-  { name: "Bins", path: "/bins", icon: ClipboardList },
-  { name: "Recipes", path: "/recipes", icon: Workflow },
-  { name: "Process Tracking", path: "/process", icon: CheckCircle2 },
-  { name: "QC", path: "/qc", icon: CheckCircle2 },
-  { name: "Settings", path: "/settings", icon: Settings },
+  { name: 'Inventory', path: '/inventory', icon: Warehouse },
+  { name: 'Inward', path: '/inward', icon: Package },
+  { name: 'Outward', path: '/outward', icon: Box },
+  { name: 'Ingredients', path: '/ingredients', icon: FlaskConical },
+  { name: 'Bins', path: '/bins', icon: ClipboardList },
+  { name: 'Recipes', path: '/recipes', icon: Workflow },
+  { name: 'Process Tracking', path: '/process', icon: CheckCircle2 },
+  { name: 'QC', path: '/qc', icon: CheckCircle2 },
+  { name: 'Reports', path: '/reports', icon: Scroll },
+  { name: 'PLC monitor', path: '/plc-monitor', icon: Computer },
+  { name: 'QR preview', path: '/qr', icon: ScanQrCode },
+  { name: 'Settings', path: '/settings', icon: Settings },
 ];
 
 export default function Sidebar() {
@@ -58,11 +64,7 @@ export default function Sidebar() {
           onClick={() => setCollapsed(!collapsed)}
           className="p-1 rounded hover:bg-gray-800"
         >
-          {collapsed ? (
-            <ChevronRight size={20} />
-          ) : (
-            <ChevronLeft size={20} />
-          )}
+          {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
         </button>
       </div>
 
@@ -77,8 +79,8 @@ export default function Sidebar() {
               key={item.path}
               href={item.path}
               className={cn(
-                "flex items-center gap-3 rounded px-3 py-2 text-sm font-medium hover:bg-gray-800 transition-colors",
-                isActive ? "bg-gray-800 text-white" : "text-gray-300"
+                'flex items-center gap-3 rounded px-3 py-2 text-sm font-medium hover:bg-gray-800 transition-colors',
+                isActive ? 'bg-gray-800 text-white' : 'text-gray-300'
               )}
             >
               <Icon size={20} />

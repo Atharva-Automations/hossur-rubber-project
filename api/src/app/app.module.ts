@@ -5,6 +5,8 @@ import { OutwardModule } from '../outward/outward.module';
 import { IngredientsModule } from '../ingredients/ingredients.module';
 import { BinsModule } from '../bins/bins.module';
 import { ProductionModule } from '../production/production.module';
+import { RecipeModule } from '../recipe/recipe.module';
+import { PlcModule } from '../plc/plc.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { ProductionModule } from '../production/production.module';
     IngredientsModule,
     BinsModule,
     ProductionModule,
+    RecipeModule,
+    // PlcModule,
   ],
 })
 export class AppModule {}
