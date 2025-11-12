@@ -1,10 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { useBins } from '@/hooks/useBins';
+import { useAssignBin } from '@/hooks/useAssignBins';
+import { useUnassignedIngredients } from '@/hooks/useUnassignedIngredients';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/use-toast';
 import {
   Select,
   SelectTrigger,
@@ -12,15 +16,9 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
-// import { useIngredients } from '@/hooks/useIngredients';
-import { useBins } from '@/hooks/useBins';
-import { useAssignBin } from '@/hooks/useAssignBins';
-import { toast } from '@/components/ui/use-toast';
-import { useUnassignedIngredients } from '@/hooks/useUnassignedIngredients';
 
 export default function AssignBinPage() {
   const { data: allBins = [] } = useBins();
-  // const { data: ingredients = [] } = useIngredients();
   const { mutateAsync: assignBin, isPending } = useAssignBin();
   const { data: availableIngredients = [] } = useUnassignedIngredients();
 
@@ -36,9 +34,7 @@ export default function AssignBinPage() {
     maxQuantity?: string;
   }>({});
 
-  // Filter unassigned bins and ingredients
   const availableBins = allBins.filter((b: any) => !b.ingredientId);
-  // const availableIngredients = ingredients.filter((i: any) => !i.binAssignment);
 
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};

@@ -4,72 +4,12 @@ import { AssignBinDto } from './dto/assign-bin.dto';
 
 @Injectable()
 export class BinService {
-  constructor(private prisma: PrismaService) {}
-
-  async create(data: any) {
-    const { binNumber, ingredientId, minQuantity, maxQuantity } = data;
-
-    // ✅ Check for duplicate bin number
-    const existingBin = await this.prisma.binAssignment.findUnique({
-      where: { binNumber },
-    });
-    if (existingBin) {
-      throw new BadRequestException(`Bin number ${binNumber} already exists.`);
-    }
-
-    // ✅ Check if ingredient already has a bin (1:1 assignment)
-    const assignedBin = await this.prisma.binAssignment.findFirst({
-      where: { ingredientId },
-    });
-    if (assignedBin) {
-      throw new BadRequestException(
-        `This ingredient already has a bin assigned.`
-      );
-    }
-
-    return this.prisma.binAssignment.create({
-      data: {
-        binNumber,
-        ingredientId,
-        minQuantity: minQuantity || 0,
-        maxQuantity: maxQuantity || 0,
-        currentQuantity: 0,
-      },
-      include: {
-        ingredient: true,
-      },
-    });
-  }
-
-  async findAll() {
-    return this.prisma.binAssignment.findMany({
-      include: {
-        ingredient: true,
-      },
-      orderBy: { binNumber: 'asc' },
-    });
-  }
-
-  async delete(id: number) {
-    return this.prisma.binAssignment.delete({ where: { id } });
-  }
-
-  async update(id: number, data: any) {
-    return this.prisma.binAssignment.update({
-      where: { id },
-      data: {
-        binNumber: data.binNumber,
-        minQuantity: Number(data.minQuantity),
-        maxQuantity: Number(data.maxQuantity),
-        ingredientId: Number(data.ingredientId),
-      },
-    });
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   async assignBin(dto: AssignBinDto) {
     const { binNumber, ingredientId, minQuantity, maxQuantity } = dto;
 
-    // validate min/max
+    // 1. Validate Quantities
     if (minQuantity <= 0)
       throw new BadRequestException('Minimum quantity must be greater than 0');
     if (maxQuantity <= minQuantity)
@@ -77,23 +17,23 @@ export class BinService {
         'Maximum quantity must be greater than minimum quantity'
       );
 
-    // Check if bin already assigned
-    const existingBin = await this.prisma.binAssignment.findUnique({
+    // 2. Check for duplicate bin number
+    const existingBinByNumber = await this.prisma.binAssignment.findUnique({
       where: { binNumber },
     });
-    if (existingBin)
+    if (existingBinByNumber)
       throw new BadRequestException(`Bin ${binNumber} is already assigned.`);
 
-    // Check if ingredient already assigned
-    const existingIngredient = await this.prisma.binAssignment.findUnique({
+    // 3. Check if ingredient already assigned
+    const existingBinByIngredient = await this.prisma.binAssignment.findUnique({
       where: { ingredientId },
     });
-    if (existingIngredient)
+    if (existingBinByIngredient)
       throw new BadRequestException(
         'This ingredient already has a bin assigned.'
       );
 
-    // Create new assignment
+    // 4. Create new assignment
     const assignment = await this.prisma.binAssignment.create({
       data: {
         binNumber,
@@ -113,12 +53,102 @@ export class BinService {
     };
   }
 
-  async getAllBins() {
+  async findAll() {
     return this.prisma.binAssignment.findMany({
-      include: { ingredient: true },
+      include: {
+        ingredient: true,
+      },
       orderBy: { binNumber: 'asc' },
     });
   }
+
+  async update(
+    id: number,
+    data: Partial<AssignBinDto> & { currentQuantity?: number }
+  ) {
+    const { binNumber, ingredientId, minQuantity, maxQuantity } = data;
+
+    const existing = await this.prisma.binAssignment.findUnique({
+      where: { id },
+    });
+    if (!existing) throw new BadRequestException('Bin assignment not found.');
+
+    const newBinNumber = binNumber ?? existing.binNumber;
+    const newIngredientId = ingredientId ?? existing.ingredientId;
+    const newMinQuantity = minQuantity ?? existing.minQuantity;
+    const newMaxQuantity = maxQuantity ?? existing.maxQuantity;
+
+    // 1. Validate Quantities
+    if (newMinQuantity <= 0)
+      throw new BadRequestException('Minimum quantity must be greater than 0');
+    if (newMaxQuantity <= newMinQuantity)
+      throw new BadRequestException(
+        'Maximum quantity must be greater than minimum quantity'
+      );
+    // Also check if current quantity exceeds new max
+    if ((data.currentQuantity ?? existing.currentQuantity) > newMaxQuantity) {
+      throw new BadRequestException(
+        'Current quantity exceeds the new maximum capacity.'
+      );
+    }
+
+    // 2. Check for duplicate bin number (only if binNumber is changing)
+    if (newBinNumber !== existing.binNumber) {
+      const binConflict = await this.prisma.binAssignment.findUnique({
+        where: { binNumber: newBinNumber },
+      });
+      if (binConflict) {
+        throw new BadRequestException(
+          `Bin number ${newBinNumber} is already assigned to a different ingredient.`
+        );
+      }
+    }
+
+    // 3. Check if ingredient already assigned (only if ingredient is changing)
+    if (newIngredientId !== existing.ingredientId) {
+      const ingredientConflict = await this.prisma.binAssignment.findUnique({
+        where: { ingredientId: newIngredientId },
+      });
+      // Ensure the conflict is not with the current record being updated
+      if (ingredientConflict && ingredientConflict.id !== id) {
+        throw new BadRequestException(
+          'This ingredient is already assigned to another bin.'
+        );
+      }
+    }
+
+    return this.prisma.binAssignment.update({
+      where: { id },
+      data: {
+        binNumber: newBinNumber,
+        ingredientId: newIngredientId,
+        minQuantity: newMinQuantity,
+        maxQuantity: newMaxQuantity,
+        currentQuantity: data.currentQuantity, // Allow updating current quantity
+      },
+      include: { ingredient: true },
+    });
+  }
+
+  async delete(id: number) {
+    const existing = await this.prisma.binAssignment.findUnique({
+      where: { id },
+    });
+    // Use NotFoundException if this is exposed via a controller, but BadRequest is fine too
+    if (!existing) throw new BadRequestException('Bin assignment not found');
+
+    // Add check to prevent deletion if currentQuantity > 0 (optional, but good practice)
+    if (existing.currentQuantity > 0) {
+      throw new BadRequestException(
+        'Cannot delete bin assignment with material currently stored.'
+      );
+    }
+
+    await this.prisma.binAssignment.delete({ where: { id } });
+    return { message: 'Bin assignment deleted successfully' };
+  }
+
+  // --- Utility Methods ---
 
   async getAvailableBins() {
     // assuming fixed 25 bins labeled "B1" to "B25"
@@ -130,19 +160,7 @@ export class BinService {
     return allBins.filter((b) => !assignedSet.has(b));
   }
 
-  // ✅ Delete assignment
-  async deleteBin(id: number) {
-    const existing = await this.prisma.binAssignment.findUnique({
-      where: { id },
-    });
-    if (!existing) throw new BadRequestException('Bin assignment not found');
-
-    await this.prisma.binAssignment.delete({ where: { id } });
-    return { message: 'Bin assignment deleted successfully' };
-  }
-
   async getUnassignedIngredients() {
-    // All ingredients
     const all = await this.prisma.ingredient.findMany({
       select: {
         id: true,
@@ -151,14 +169,11 @@ export class BinService {
         materialName: true,
       },
     });
-
-    // Ingredients that already have a bin
     const assigned = await this.prisma.binAssignment.findMany({
       select: { ingredientId: true },
     });
     const assignedSet = new Set(assigned.map((b) => b.ingredientId));
 
-    // Return only unassigned ingredients
     return all.filter((ing) => !assignedSet.has(ing.id));
   }
 

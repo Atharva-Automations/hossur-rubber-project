@@ -3,7 +3,7 @@ import ModbusRTU from 'modbus-serial';
 
 @Injectable()
 export class PlcService implements OnModuleInit {
-  private client = new ModbusRTU();
+  private readonly client = new ModbusRTU();
   private isConnected = false;
 
   async onModuleInit() {
@@ -12,7 +12,6 @@ export class PlcService implements OnModuleInit {
       await this.client.connectTCP('192.168.1.5', { port: 502 });
       this.client.setID(1);
 
-      // Quick connectivity test
       const test = await this.client.readHoldingRegisters(0, 1);
       console.log('✅ Connected to PLC, test value:', test.data[0]);
 

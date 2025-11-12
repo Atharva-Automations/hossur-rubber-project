@@ -1,9 +1,9 @@
 'use client';
 
-import React from 'react';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import InwardActions from './InwardActions';
 import { useDeleteInward } from '@/hooks/useInward';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -12,9 +12,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
 
-export default function InwardTable({ data = [] }: { data: any[] }) {
+export default function InwardTable({ data = [] }: Readonly<{ data: any[] }>) {
   const del = useDeleteInward();
 
   const [page, setPage] = useState(1);
@@ -99,7 +98,6 @@ export default function InwardTable({ data = [] }: { data: any[] }) {
         {/* Page numbers */}
         {Array.from({ length: totalPages }, (_, i) => i + 1)
           .filter((p) => {
-            // show only: first, last, current, and +/- 1 around current
             if (p === 1 || p === totalPages) return true;
             if (Math.abs(p - page) <= 1) return true;
             return false;

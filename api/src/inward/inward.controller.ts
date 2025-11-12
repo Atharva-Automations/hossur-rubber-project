@@ -1,4 +1,3 @@
-// api/src/inward/inward.controller.ts
 import {
   Controller,
   Get,

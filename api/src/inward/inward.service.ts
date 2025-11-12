@@ -1,8 +1,13 @@
-// api/src/inward/inward.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInwardDto } from './dto/create-inward.dto';
 import { UpdateInwardDto } from './dto/update-inward.dto';
+import { QrState, Prisma } from '@prisma/client';
+
+type PrismaTransactionClient = Omit<
+  PrismaService,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+>;
 
 @Injectable()
 export class InwardService {
@@ -10,47 +15,18 @@ export class InwardService {
 
   private computeStatus(expDate: Date) {
     const today = new Date();
-    // normalize to date-only comparison
-    const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const t = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    ).getTime();
     const e = new Date(
       expDate.getFullYear(),
       expDate.getMonth(),
       expDate.getDate()
-    );
+    ).getTime();
+
     return e < t ? 'Expired' : 'Active';
-  }
-
-  async create(dto: CreateInwardDto) {
-    // Inside create()
-    const inward = await this.prisma.inwardEntry.create({
-      data: {
-        materialName: dto.materialName.trim(),
-        supplierName: dto.supplierName.trim(),
-        quantity: dto.quantity,
-        unit: dto.unit,
-        bagWeight: dto.bagWeight ?? null,
-        storedAsWhole: dto.storedAsWhole ?? false,
-        mfgDate: new Date(dto.mfgDate),
-        expDate: new Date(dto.expDate),
-        status: this.computeStatus(new Date(dto.expDate)),
-      },
-    });
-
-    await this.incrementStock(dto.materialName, dto.unit, dto.quantity);
-
-    const qrList = this.buildQrList(inward);
-    if (qrList.length) {
-      await this.prisma.inwardQrCode.createMany({
-        data: qrList.map((qr) => ({
-          ...qr,
-          inwardId: inward.id,
-          state: 'CREATED',
-          printed: false,
-        })),
-      });
-    }
-
-    return this.findOne(inward.id);
   }
 
   private buildQrList(inward: {
@@ -82,6 +58,196 @@ export class InwardService {
     }
     return list;
   }
+
+  // ---------- STOCK MANAGEMENT HELPERS ----------
+
+  private async incrementStock(
+    materialName: string,
+    unit: string,
+    quantity: number,
+    tx: PrismaTransactionClient | Prisma.TransactionClient = this.prisma
+  ) {
+    await tx.materialStock.upsert({
+      where: { materialName },
+      update: {
+        totalQuantity: { increment: quantity },
+        updatedAt: new Date(),
+      },
+      create: {
+        materialName,
+        totalQuantity: quantity,
+        unit,
+      },
+    });
+  }
+
+  private async decrementStock(
+    materialName: string,
+    quantity: number,
+    tx: PrismaTransactionClient | Prisma.TransactionClient = this.prisma
+  ) {
+    await tx.materialStock.update({
+      where: { materialName },
+      data: { totalQuantity: { decrement: quantity } },
+    });
+  }
+
+  private async adjustStockOnEdit(
+    oldMaterial: string,
+    newMaterial: string,
+    oldQty: number,
+    newQty: number,
+    unit: string,
+    tx: PrismaTransactionClient | Prisma.TransactionClient
+  ) {
+    if (oldMaterial === newMaterial) {
+      const diff = newQty - oldQty;
+      if (diff !== 0) {
+        await tx.materialStock.update({
+          where: { materialName: oldMaterial },
+          data: { totalQuantity: { increment: diff } },
+        });
+      }
+    } else {
+      await tx.materialStock.update({
+        where: { materialName: oldMaterial },
+        data: { totalQuantity: { decrement: oldQty } },
+      });
+      await this.incrementStock(newMaterial, unit, newQty, tx);
+    }
+  }
+
+  async create(dto: CreateInwardDto) {
+    const materialName = dto.materialName.trim();
+    const expDate = new Date(dto.expDate);
+    const storedAsWhole = dto.storedAsWhole ?? false;
+    const bagWeight = storedAsWhole ? null : dto.bagWeight ?? null;
+
+    const newInward = await this.prisma.$transaction(async (tx) => {
+      // 1. Create Inward Entry
+      const inward = await tx.inwardEntry.create({
+        data: {
+          materialName,
+          supplierName: dto.supplierName.trim(),
+          quantity: dto.quantity,
+          unit: dto.unit,
+          bagWeight: bagWeight,
+          storedAsWhole: storedAsWhole,
+          mfgDate: new Date(dto.mfgDate),
+          expDate: expDate,
+          status: this.computeStatus(expDate),
+        },
+      });
+
+      // 2. Update Stock
+      await this.incrementStock(materialName, dto.unit, dto.quantity, tx);
+
+      // 3. Create QR Codes
+      const qrList = this.buildQrList(inward);
+      if (qrList.length) {
+        await tx.inwardQrCode.createMany({
+          data: qrList.map((qr) => ({
+            ...qr,
+            inwardId: inward.id,
+            state: QrState.CREATED,
+            printed: false,
+          })),
+        });
+      }
+
+      return inward;
+    });
+
+    return this.findOne(newInward.id);
+  }
+
+  async update(id: number, dto: UpdateInwardDto) {
+    const existing = await this.prisma.inwardEntry.findUnique({
+      where: { id },
+      include: { qrCodes: true },
+    });
+    if (!existing) throw new NotFoundException('Inward entry not found');
+
+    const mfg = dto.mfgDate ? new Date(dto.mfgDate) : existing.mfgDate;
+    const exp = dto.expDate ? new Date(dto.expDate) : existing.expDate;
+    const status = this.computeStatus(exp);
+
+    const newStoredAsWhole = dto.storedAsWhole ?? existing.storedAsWhole;
+
+    const newBagWeight =
+      newStoredAsWhole === true ? null : dto.bagWeight ?? existing.bagWeight;
+
+    const bagLogicChanged =
+      (dto.quantity !== undefined && dto.quantity !== existing.quantity) ||
+      (dto.bagWeight !== undefined && dto.bagWeight !== existing.bagWeight) ||
+      (dto.storedAsWhole !== undefined &&
+        dto.storedAsWhole !== existing.storedAsWhole);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // 1. Update Inward Entry
+      const updatedEntry = await tx.inwardEntry.update({
+        where: { id },
+        data: {
+          materialName: dto.materialName?.trim() ?? existing.materialName,
+          supplierName: dto.supplierName?.trim() ?? existing.supplierName,
+          quantity: dto.quantity ?? existing.quantity,
+          bagWeight: newBagWeight,
+          storedAsWhole: newStoredAsWhole,
+          mfgDate: mfg,
+          expDate: exp,
+          status,
+        },
+      });
+
+      // 2. Adjust Stock
+      await this.adjustStockOnEdit(
+        existing.materialName,
+        dto.materialName ?? existing.materialName,
+        existing.quantity,
+        dto.quantity ?? existing.quantity,
+        dto.unit ?? existing.unit,
+        tx
+      );
+
+      if (bagLogicChanged) {
+        await tx.inwardQrCode.deleteMany({ where: { inwardId: id } });
+        const qrList = this.buildQrList(updatedEntry);
+        if (qrList.length) {
+          await tx.inwardQrCode.createMany({
+            data: qrList.map((qr) => ({
+              ...qr,
+              inwardId: id,
+              state: QrState.CREATED,
+              printed: false,
+            })),
+          });
+        }
+      }
+      return updatedEntry;
+    });
+
+    return this.findOne(id);
+  }
+
+  async remove(id: number) {
+    const existing = await this.prisma.inwardEntry.findUnique({
+      where: { id },
+    });
+    if (!existing) throw new NotFoundException('Inward entry not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Delete QR codes
+      await tx.inwardQrCode.deleteMany({ where: { inwardId: id } });
+      // 2. Delete Inward entry
+      await tx.inwardEntry.delete({ where: { id } });
+      // 3. Decrement Stock
+      await this.decrementStock(existing.materialName, existing.quantity, tx);
+    });
+
+    return { ok: true };
+  }
+
+  // --- Retrieval Methods ---
 
   async findAll() {
     return this.prisma.inwardEntry.findMany({
@@ -115,133 +281,9 @@ export class InwardService {
     }));
   }
 
-  async update(id: number, dto: UpdateInwardDto) {
-    const existing = await this.prisma.inwardEntry.findUnique({
-      where: { id },
-      include: { qrCodes: true },
-    });
-    if (!existing) throw new NotFoundException('Inward entry not found');
-
-    const mfg = dto.mfgDate ? new Date(dto.mfgDate) : existing.mfgDate;
-    const exp = dto.expDate ? new Date(dto.expDate) : existing.expDate;
-    const status = this.computeStatus(exp);
-
-    const updated = await this.prisma.inwardEntry.update({
-      where: { id },
-      data: {
-        materialName: dto.materialName?.trim() ?? existing.materialName,
-        supplierName: dto.supplierName?.trim() ?? existing.supplierName,
-        quantity: dto.quantity ?? existing.quantity,
-        bagWeight:
-          dto.storedAsWhole === true
-            ? null
-            : dto.bagWeight ?? existing.bagWeight,
-        storedAsWhole: dto.storedAsWhole ?? existing.storedAsWhole,
-        mfgDate: mfg,
-        expDate: exp,
-        status,
-      },
-    });
-
-    await this.adjustStockOnEdit(
-      existing.materialName,
-      dto.materialName ?? existing.materialName,
-      existing.quantity,
-      dto.quantity ?? existing.quantity,
-      dto.unit ?? existing.unit
-    );
-
-    const bagLogicChanged =
-      (dto.quantity !== undefined && dto.quantity !== existing.quantity) ||
-      (dto.bagWeight !== undefined && dto.bagWeight !== existing.bagWeight) ||
-      (dto.storedAsWhole !== undefined &&
-        dto.storedAsWhole !== existing.storedAsWhole);
-
-    if (bagLogicChanged) {
-      await this.prisma.inwardQrCode.deleteMany({ where: { inwardId: id } });
-      const qrList = this.buildQrList(updated);
-      if (qrList.length) {
-        await this.prisma.inwardQrCode.createMany({
-          data: qrList.map((qr) => ({ ...qr, inwardId: id })),
-        });
-      }
-    }
-
-    return this.findOne(id);
-  }
-
-  async remove(id: number) {
-    const existing = await this.prisma.inwardEntry.findUnique({
-      where: { id },
-    });
-    if (!existing) throw new NotFoundException('Inward entry not found');
-
-    await this.prisma.inwardQrCode.deleteMany({ where: { inwardId: id } });
-    await this.prisma.inwardEntry.delete({ where: { id } });
-
-    await this.decrementStock(existing.materialName, existing.quantity);
-
-    return { ok: true };
-  }
-
-  // ---------- STOCK MANAGEMENT HELPERS ----------
-
   async getStock() {
     return this.prisma.materialStock.findMany({
       orderBy: { materialName: 'asc' },
-    });
-  }
-
-  private async incrementStock(
-    materialName: string,
-    unit: string,
-    quantity: number
-  ) {
-    await this.prisma.materialStock.upsert({
-      where: { materialName },
-      update: {
-        totalQuantity: { increment: quantity },
-        updatedAt: new Date(),
-      },
-      create: {
-        materialName,
-        totalQuantity: quantity,
-        unit,
-      },
-    });
-  }
-
-  private async adjustStockOnEdit(
-    oldMaterial: string,
-    newMaterial: string,
-    oldQty: number,
-    newQty: number,
-    unit: string
-  ) {
-    if (oldMaterial === newMaterial) {
-      const diff = newQty - oldQty;
-      if (diff !== 0) {
-        await this.prisma.materialStock.update({
-          where: { materialName: oldMaterial },
-          data: { totalQuantity: { increment: diff } },
-        });
-      }
-    } else {
-      // subtract from old material
-      await this.prisma.materialStock.update({
-        where: { materialName: oldMaterial },
-        data: { totalQuantity: { decrement: oldQty } },
-      });
-
-      // add to new material
-      await this.incrementStock(newMaterial, unit, newQty);
-    }
-  }
-
-  private async decrementStock(materialName: string, quantity: number) {
-    await this.prisma.materialStock.update({
-      where: { materialName },
-      data: { totalQuantity: { decrement: quantity } },
     });
   }
 
@@ -252,7 +294,6 @@ export class InwardService {
     const active = all.filter((r) => r.status === 'Active').length;
     const expired = all.filter((r) => r.status === 'Expired').length;
 
-    // Aggregate total quantity by supplier
     const supplierMap = new Map<string, number>();
     for (const r of all) {
       const current = supplierMap.get(r.supplierName) ?? 0;
@@ -296,7 +337,6 @@ export class InwardService {
       select: { materialName: true },
       orderBy: { materialName: 'asc' },
     });
-    // Return array of strings
     return rows.map((r) => r.materialName);
   }
 
@@ -313,7 +353,7 @@ export class InwardService {
     return this.prisma.inwardQrCode.findMany({
       where: {
         inward: { materialName: material },
-        state: 'CREATED', // only available (not issued or consumed)
+        state: QrState.CREATED,
       },
       select: {
         qrId: true,

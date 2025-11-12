@@ -17,7 +17,13 @@ export function useCreateInward() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: any) => api.post('/inward', data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['inward'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['inward'] });
+      qc.invalidateQueries({ queryKey: ['materials'] });
+      qc.invalidateQueries({ queryKey: ['suppliers'] });
+      qc.invalidateQueries({ queryKey: ['inwardAnalytics'] });
+      qc.invalidateQueries({ queryKey: ['materialStock'] });
+    },
   });
 }
 

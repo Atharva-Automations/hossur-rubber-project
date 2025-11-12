@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 
 export const useBins = () =>
-  useQuery({
+  useQuery<string[]>({
     queryKey: ['available-bins'],
     queryFn: async () => {
       const res = await api.get('/bins/available');

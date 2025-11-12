@@ -20,6 +20,7 @@ export function useCreateOutward() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['outward'] });
+      qc.invalidateQueries({ queryKey: ['materialStock'] });
     },
   });
 }

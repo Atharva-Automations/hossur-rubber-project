@@ -8,7 +8,7 @@ import { QrState } from '@prisma/client';
 
 @Injectable()
 export class OutwardService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(data: any) {
     const { materialName, issuedTo, selectedQrIds = [] } = data;
@@ -19,19 +19,18 @@ export class OutwardService {
       );
     }
 
-    // Fetch all selected QR details (still CREATED)
     const qrs = await this.prisma.inwardQrCode.findMany({
       where: { qrId: { in: selectedQrIds }, state: QrState.CREATED },
       include: { inward: true },
     });
 
     if (qrs.length === 0) {
+      const invalidCount = selectedQrIds.length - qrs.length;
       throw new BadRequestException(
-        'Selected QR codes are invalid or already issued.'
+        `Selected QR codes are invalid or already issued. ${invalidCount} of ${selectedQrIds.length} failed validation.`
       );
     }
 
-    // Ensure same material
     const materialSet = new Set(qrs.map((q) => q.inward.materialName));
     if (materialSet.size > 1) {
       throw new BadRequestException(
@@ -42,7 +41,6 @@ export class OutwardService {
     const totalQty = qrs.reduce((sum, q) => sum + (q.inward.bagWeight || 0), 0);
     const unit = qrs[0].inward.unit;
 
-    // ✅ Reduce stock immediately
     const stock = await this.prisma.materialStock.findUnique({
       where: { materialName },
     });
@@ -50,24 +48,24 @@ export class OutwardService {
     if (stock.totalQuantity < totalQty)
       throw new BadRequestException('Not enough stock available');
 
-    await this.prisma.materialStock.update({
-      where: { materialName },
-      data: { totalQuantity: { decrement: totalQty } },
-    });
-
-    // ✅ Create outward entry (keep QR states unchanged)
-    const outward = await this.prisma.outwardEntry.create({
-      data: {
-        materialName,
-        quantity: totalQty,
-        unit,
-        issuedTo,
-        purpose: data.purpose || 'Production',
-        remarks: data.remarks || '',
-        status: 'Pending',
-        qrScanStatus: { totalBags: qrs.length, scannedBags: 0 },
-      },
-    });
+    const [_, outward] = await this.prisma.$transaction([
+      this.prisma.materialStock.update({
+        where: { materialName },
+        data: { totalQuantity: { decrement: totalQty } },
+      }),
+      this.prisma.outwardEntry.create({
+        data: {
+          materialName,
+          quantity: totalQty,
+          unit,
+          issuedTo,
+          purpose: data.purpose || 'Production',
+          remarks: data.remarks || '',
+          status: 'Pending',
+          qrScanStatus: { totalBags: qrs.length, scannedBags: 0 },
+        },
+      }),
+    ]);
 
     return { outward, totalBags: qrs.length, totalQty };
   }
@@ -81,10 +79,6 @@ export class OutwardService {
   async findOne(id: number) {
     return this.prisma.outwardEntry.findUnique({
       where: { id },
-      // include: {
-      //   // optional: if you have relations, e.g.
-      //   // inwardQrCodes: true,
-      // },
     });
   }
 
@@ -107,7 +101,6 @@ export class OutwardService {
         `This bag belongs to ${qr.inward.materialName}, not ${outward.materialName}`
       );
 
-    // ✅ Mark bag as issued
     await this.prisma.inwardQrCode.update({
       where: { qrId },
       data: {
@@ -117,7 +110,6 @@ export class OutwardService {
       },
     });
 
-    // ✅ Progress tracking
     const totalBags = (outward.qrScanStatus as any)?.totalBags || 0;
     const scannedBags = await this.prisma.inwardQrCode.count({
       where: { outwardId, state: QrState.ISSUED },

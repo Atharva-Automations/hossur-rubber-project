@@ -1,4 +1,3 @@
-// src/inward/dto/create-inward.dto.ts
 import { BaseDto } from '../../common/dto/base.dto';
 import {
   IsString,
@@ -15,7 +14,7 @@ export class CreateInwardDto extends BaseDto {
 
   @Type(() => Number)
   @IsNumber()
-  quantity!: number; // Override for stricter validation
+  quantity!: number;
 
   @IsOptional()
   @Type(() => Number)

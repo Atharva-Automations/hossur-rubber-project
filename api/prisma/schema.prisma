@@ -51,9 +51,10 @@ model InwardEntry {
 // ─────────────────────────────────────────────
 // InwardQrCode  — one record per bag
 // ─────────────────────────────────────────────
+// add this field to your existing model
 model InwardQrCode {
   id    Int    @id @default(autoincrement())
-  qrId  String @unique
+  qrId  String @unique     
   bagNo Int
   label String
 
@@ -68,7 +69,11 @@ model InwardQrCode {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
+
+  // Optional: quick lookup index (not required—tag already unique)
+  // @@index([tag])
 }
+
 
 // ─────────────────────────────────────────────
 // Outward Entries — issuing materials for production
@@ -182,3 +187,5 @@ model StepIngredient {
   quantity Float
   unit     String
 }
+
+

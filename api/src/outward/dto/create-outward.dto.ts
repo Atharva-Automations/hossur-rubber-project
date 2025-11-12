@@ -1,5 +1,3 @@
-// src/outward/dto/create-outward.dto.ts
-
 import {
   IsString,
   IsNumber,
