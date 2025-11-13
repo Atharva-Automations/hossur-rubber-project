@@ -1,8 +1,10 @@
-"use client";
-import Sidebar from "./Sidebar";
-import Topbar from "./Topbar";
+'use client';
+import Sidebar from './Sidebar';
+import Topbar from './Topbar';
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <div className="flex h-screen w-full">
       <Sidebar />

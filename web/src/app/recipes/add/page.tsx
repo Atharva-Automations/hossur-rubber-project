@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import DashboardLayout from '@/components/layout/DashboardLayout';
+import { useCreateRecipe } from '@/hooks/useRecipes';
+import { useIngredients } from '@/hooks/useIngredients';
+
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -15,23 +18,21 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
-import { toast } from '@/components/ui/use-toast';
-import { useCreateRecipe } from '@/hooks/useRecipes';
-import { useIngredients } from '@/hooks/useIngredients';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 // ---------- Types ----------
 type Unit = 'KG' | 'L' | 'G' | 'ML';
 type StepType = 'KNEADER' | 'MIXING';
 
 type StepIngredient = {
-  id: string; // client-side temp id
-  name: string; // we’re sending this as ingredientCode in payload
-  quantity: string; // keep as string in form; cast on save
+  id: string;
+  name: string;
+  quantity: string;
   unit: Unit;
 };
 
 type RecipeStep = {
-  id: string; // client-side temp id
+  id: string;
   stepType: StepType;
   sequenceNumber: number | '';
   timerSeconds: number | '';
@@ -110,7 +111,6 @@ export default function RecipeAddPage() {
   const [stepIndex, setStepIndex] = useState<0 | 1 | 2 | 3>(0);
   const [draft, setDraft] = useState<RecipeDraft>(emptyDraft);
   const { mutateAsync: createRecipe, isPending } = useCreateRecipe();
-  const { data: ingredientsList = [] } = useIngredients();
 
   // Restore draft from localStorage
   useEffect(() => {
@@ -242,8 +242,9 @@ export default function RecipeAddPage() {
     setStepIndex((prev) => Math.min(3, prev + 1) as 0 | 1 | 2 | 3);
   };
 
-  const goBack = () =>
+  const goBack = () => {
     setStepIndex((prev) => Math.max(0, prev - 1) as 0 | 1 | 2 | 3);
+  };
 
   // ----- Save to backend -----
   const onSave = async () => {
@@ -573,11 +574,11 @@ function StepDot({
   active,
   done,
   label,
-}: {
+}: Readonly<{
   active: boolean;
   done: boolean;
   label: string;
-}) {
+}>) {
   return (
     <div className="flex items-center gap-2">
       <span
@@ -601,11 +602,11 @@ function FooterNav({
   onBack,
   onNext,
   nextLabel = 'Next',
-}: {
+}: Readonly<{
   onBack: null | (() => void);
   onNext: () => void;
   nextLabel?: string;
-}) {
+}>) {
   return (
     <div className="flex justify-between">
       <Button
@@ -623,7 +624,7 @@ function FooterNav({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
     <div className="text-sm">
       <div className="text-gray-500">{label}</div>
@@ -640,7 +641,7 @@ function StepList({
   onChangeIngredient,
   onRemoveIngredient,
   disabled,
-}: {
+}: Readonly<{
   steps: RecipeStep[];
   onChange: (id: string, patch: Partial<RecipeStep>) => void;
   onRemove: (id: string) => void;
@@ -652,7 +653,7 @@ function StepList({
   ) => void;
   onRemoveIngredient: (stepId: string, ingId: string) => void;
   disabled?: boolean;
-}) {
+}>) {
   const { data: ingredientOptions = [], isLoading: isLoadingIngredients } =
     useIngredients();
 

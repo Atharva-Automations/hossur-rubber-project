@@ -1,14 +1,15 @@
 'use client';
 import { useEffect, useState } from 'react';
+import api from '@/lib/api';
+import QRCode from 'react-qr-code';
+
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import QRCode from 'react-qr-code';
-import api from '@/lib/api';
 
 export default function QrPreviewModal({ open, onClose, inwardId }: any) {
   const [qrCodes, setQrCodes] = useState<any[]>([]);

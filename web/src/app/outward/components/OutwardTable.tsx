@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import OutwardActions from './OutwardActions';
-import ScanQrModal from './ScanQrModal';
-import { useOutwardList } from '@/hooks/useOutwards';
 import { QrCode } from 'lucide-react';
+import ScanQrModal from './ScanQrModal';
+import OutwardActions from './OutwardActions';
+import { useOutwardList } from '@/hooks/useOutwards';
+
 import { Button } from '@/components/ui/button';
 import {
   Table,

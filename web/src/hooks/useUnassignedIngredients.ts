@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { IngredientOption } from '@/types/data';
+import { useQuery } from '@tanstack/react-query';
 
 export const useUnassignedIngredients = () =>
   useQuery<IngredientOption[]>({

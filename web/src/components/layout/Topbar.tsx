@@ -6,12 +6,6 @@ export default function Topbar() {
       <h1 className="font-semibold text-lg">Dashboard</h1>
       <div className="flex items-center space-x-3">
         <span className="text-gray-600">Admin</span>
-        {/* <img
-          // src="./photo.jpeg"
-          src=""
-          alt="User"
-          className="w-8 h-8 rounded-full border border-gray-300"
-        /> */}
       </div>
     </header>
   );

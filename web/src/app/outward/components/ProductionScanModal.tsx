@@ -1,18 +1,19 @@
 'use client';
 
+import api from '@/lib/api';
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from '@/hooks/use-toast';
+import { useProductionScan } from '@/hooks/useProductionScan';
+
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { toast } from '@/hooks/use-toast';
-import api from '@/lib/api';
-import { useQueryClient } from '@tanstack/react-query';
-import { useProductionScan } from '@/hooks/useProductionScan';
 
 export default function ProductionScanModal({
   open,
@@ -28,7 +29,7 @@ export default function ProductionScanModal({
   } | null>(null);
 
   const queryClient = useQueryClient();
-  const { mutateAsync: scanQr, isPending } = useProductionScan();
+  const { isPending } = useProductionScan();
 
   const handleScan = async () => {
     if (!qrId.trim()) return;

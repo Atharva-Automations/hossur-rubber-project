@@ -1,5 +1,3 @@
-// src/hooks/useMaterialStock.ts
-
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 
@@ -7,7 +5,7 @@ export function useMaterialStock() {
   return useQuery<MaterialStock[], Error>({
     queryKey: ['materialStock'],
     queryFn: async () => {
-      const res = await api.get('/inward/stock'); // API endpoint to fetch material stock
+      const res = await api.get('/inward/stock');
       return res.data;
     },
   });

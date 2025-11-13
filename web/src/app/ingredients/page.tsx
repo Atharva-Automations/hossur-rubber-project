@@ -1,6 +1,5 @@
 'use client';
 
-// import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -13,14 +12,12 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-// import AddIngredientDrawer from './AddIngredientDrawer';
 import { Plus, Trash2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import Link from 'next/link';
 
 export default function IngredientsPage() {
   const qc = useQueryClient();
-  // const [openDrawer, setOpenDrawer] = useState(false);
 
   const { data: ingredients = [] } = useQuery({
     queryKey: ['ingredients'],

@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
-import OutwardDashboard from './components/OutwardDashboard';
+
+import { Button } from '@/components/ui/button';
 import OutwardTable from './components/OutwardTable';
+import OutwardDashboard from './components/OutwardDashboard';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import ProductionScanModal from './components/ProductionScanModal';
 
 export default function OutwardPage() {
@@ -27,7 +28,6 @@ export default function OutwardPage() {
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => setScanOpen(true)}
           >
-            {/* <Plus size={16} /> */}
             Production Scan
           </Button>
         </div>

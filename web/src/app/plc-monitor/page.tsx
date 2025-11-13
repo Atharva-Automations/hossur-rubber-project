@@ -27,7 +27,7 @@ export default function PlcMonitorPage() {
 
   useEffect(() => {
     fetchRegisters();
-    const interval = setInterval(fetchRegisters, 3000); // auto-refresh every 3s
+    const interval = setInterval(fetchRegisters, 3000);
     return () => clearInterval(interval);
   }, []);
 
