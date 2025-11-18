@@ -29,6 +29,26 @@ enum StepType {
   MIXING
 }
 
+enum BatchStatus {
+  CREATED
+  WEIGHING
+  EXECUTING
+  COMPLETED
+}
+
+enum StepExecutionStatus {
+  PENDING
+  READY
+  IN_PROGRESS
+  DONE
+}
+
+enum BagStatus {
+  CREATED
+  SCANNED
+  CONSUMED
+}
+
 // ─────────────────────────────────────────────
 // InwardEntry  — main batch-level record
 // ─────────────────────────────────────────────
@@ -54,7 +74,7 @@ model InwardEntry {
 // add this field to your existing model
 model InwardQrCode {
   id    Int    @id @default(autoincrement())
-  qrId  String @unique     
+  qrId  String @unique
   bagNo Int
   label String
 
@@ -73,7 +93,6 @@ model InwardQrCode {
   // Optional: quick lookup index (not required—tag already unique)
   // @@index([tag])
 }
-
 
 // ─────────────────────────────────────────────
 // Outward Entries — issuing materials for production
@@ -114,15 +133,16 @@ model MaterialStock {
 // Ingredient — defines a material-ingredient link
 // ─────────────────────────────────────────────
 model Ingredient {
-  id             Int              @id @default(autoincrement())
-  ingredientCode String           @unique
-  name           String?
-  type           IngredientType
-  materialName   String
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  bins           BinAssignment[]
-  recipeLinks    StepIngredient[]
+  id              Int               @id @default(autoincrement())
+  ingredientCode  String            @unique
+  name            String?
+  type            IngredientType
+  materialName    String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  bins            BinAssignment[]
+  recipeLinks     StepIngredient[]
+  BatchIngredient BatchIngredient[]
 }
 
 // ─────────────────────────────────────────────
@@ -153,6 +173,7 @@ model Recipe {
   updatedAt   DateTime @updatedAt
 
   steps RecipeStep[]
+  Batch Batch[]
 }
 
 // ─────────────────────────────────────────────
@@ -188,4 +209,114 @@ model StepIngredient {
   unit     String
 }
 
+// ─────────────────────────────────────────────
+// Batch — main production batch record linking recipe, steps, and execution
+// ─────────────────────────────────────────────
+model Batch {
+  id        Int         @id @default(autoincrement())
+  recipeId  Int
+  quantity  Int
+  status    BatchStatus @default(CREATED)
+  createdAt DateTime    @default(now())
 
+  recipe         Recipe          @relation(fields: [recipeId], references: [id])
+  steps          BatchStep[]
+  weighedBags    WeighedBag[]
+  executionScans ExecutionScan[]
+  finalProducts  FinalProduct[]
+}
+
+// ─────────────────────────────────────────────
+// BatchStep — execution step within a batch
+// ─────────────────────────────────────────────
+model BatchStep {
+  id             Int                 @id @default(autoincrement())
+  batchId        Int
+  stepType       StepType // KNEADER or MIXING (Ref from Recipe DTO enum)
+  sequenceNumber Int
+  timerSeconds   Int
+  pressure       Float
+  temperature    Float
+  rpm            Float
+  status         StepExecutionStatus @default(PENDING)
+
+  batch          Batch             @relation(fields: [batchId], references: [id])
+  ingredients    BatchIngredient[]
+  weighedBags    WeighedBag[]
+  executionScans ExecutionScan[]
+
+  @@index([batchId])
+}
+
+// ─────────────────────────────────────────────
+// BatchIngredient — links ingredients to batch steps with quantities
+// ─────────────────────────────────────────────
+model BatchIngredient {
+  id              Int    @id @default(autoincrement())
+  batchStepId     Int
+  ingredientId    Int
+  quantityPerUnit Float
+  totalQuantity   Float
+  unit            String
+
+  batchStep  BatchStep  @relation(fields: [batchStepId], references: [id])
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+
+  weighedBags WeighedBag[]
+
+  @@index([batchStepId])
+  @@index([ingredientId])
+}
+
+// ─────────────────────────────────────────────
+// WeighedBag — individual bags weighed during production batch steps
+// ─────────────────────────────────────────────
+model WeighedBag {
+  id                Int       @id @default(autoincrement())
+  qrId              String    @unique
+  batchId           Int
+  batchStepId       Int
+  batchIngredientId Int
+  weight            Float
+  status            BagStatus @default(CREATED)
+  createdAt         DateTime  @default(now())
+
+  batch           Batch           @relation(fields: [batchId], references: [id])
+  batchStep       BatchStep       @relation(fields: [batchStepId], references: [id])
+  batchIngredient BatchIngredient @relation(fields: [batchIngredientId], references: [id])
+
+  @@index([batchId])
+  @@index([batchStepId])
+  @@index([batchIngredientId])
+}
+
+// ─────────────────────────────────────────────
+// ExecutionScan — tracks QR code scans during batch step execution
+// ─────────────────────────────────────────────
+model ExecutionScan {
+  id          Int      @id @default(autoincrement())
+  qrId        String
+  batchId     Int
+  batchStepId Int
+  scannedAt   DateTime @default(now())
+
+  batch     Batch     @relation(fields: [batchId], references: [id])
+  batchStep BatchStep @relation(fields: [batchStepId], references: [id])
+
+  @@index([batchId])
+  @@index([batchStepId])
+}
+
+// ─────────────────────────────────────────────
+// FinalProduct — finished goods after batch completion
+// ─────────────────────────────────────────────
+model FinalProduct {
+  id        Int      @id @default(autoincrement())
+  batchId   Int
+  qrId      String   @unique
+  createdAt DateTime @default(now())
+
+  batch Batch @relation(fields: [batchId], references: [id])
+
+  @@index([batchId])
+}

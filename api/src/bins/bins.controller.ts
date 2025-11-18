@@ -1,3 +1,5 @@
+import { BinService } from './bins.service';
+import { AssignBinDto } from './dto/assign-bin.dto';
 import {
   Body,
   Controller,
@@ -8,8 +10,6 @@ import {
   Post,
   Patch,
 } from '@nestjs/common';
-import { BinService } from './bins.service';
-import { AssignBinDto } from './dto/assign-bin.dto';
 
 @Controller('bins')
 export class BinController {
@@ -17,7 +17,7 @@ export class BinController {
 
   @Post()
   create(@Body() body: any) {
-    return this.binService.create(body);
+    return this.binService.assignBin(body);
   }
 
   @Post('assign')
@@ -27,7 +27,7 @@ export class BinController {
 
   @Get()
   async getAllBins() {
-    return this.binService.getAllBins();
+    return this.binService.findAll();
   }
 
   @Get('available')

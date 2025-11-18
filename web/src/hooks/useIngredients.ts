@@ -11,7 +11,7 @@ export function useIngredients() {
   return useQuery<IngredientOption[]>({
     queryKey: ['ingredients'],
     queryFn: async () => {
-      const res = await api.get('/ingredients'); // make sure your controller returns a list
+      const res = await api.get('/ingredients');
       return res.data;
     },
   });

@@ -86,9 +86,16 @@ export class InwardService {
     quantity: number,
     tx: PrismaTransactionClient | Prisma.TransactionClient = this.prisma
   ) {
+    const stock = await tx.materialStock.findUnique({
+      where: { materialName },
+    });
+    if (!stock) {
+      return;
+    }
+
     await tx.materialStock.update({
       where: { materialName },
-      data: { totalQuantity: { decrement: quantity } },
+      data: { totalQuantity: { decrement: quantity }, updatedAt: new Date() },
     });
   }
 
@@ -103,16 +110,37 @@ export class InwardService {
     if (oldMaterial === newMaterial) {
       const diff = newQty - oldQty;
       if (diff !== 0) {
-        await tx.materialStock.update({
+        // ensure record exists
+        const s = await tx.materialStock.findUnique({
           where: { materialName: oldMaterial },
-          data: { totalQuantity: { increment: diff } },
         });
+        if (s) {
+          await tx.materialStock.update({
+            where: { materialName: oldMaterial },
+            data: { totalQuantity: { increment: diff }, updatedAt: new Date() },
+          });
+        } else {
+          await tx.materialStock.create({
+            data: {
+              materialName: oldMaterial,
+              totalQuantity: diff > 0 ? diff : 0,
+              unit,
+            },
+          });
+        }
       }
     } else {
-      await tx.materialStock.update({
+      // decrement old
+      const oldStock = await tx.materialStock.findUnique({
         where: { materialName: oldMaterial },
-        data: { totalQuantity: { decrement: oldQty } },
       });
+      if (oldStock) {
+        await tx.materialStock.update({
+          where: { materialName: oldMaterial },
+          data: { totalQuantity: { decrement: oldQty }, updatedAt: new Date() },
+        });
+      }
+      // increment/create new
       await this.incrementStock(newMaterial, unit, newQty, tx);
     }
   }

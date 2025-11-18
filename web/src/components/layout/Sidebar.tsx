@@ -34,6 +34,7 @@ const navItems = [
   { name: 'PLC monitor', path: '/plc-monitor', icon: Computer },
   { name: 'QR preview', path: '/qr', icon: ScanQrCode },
   { name: 'Settings', path: '/settings', icon: Settings },
+  { name: 'Simulation', path: '/simulation', icon: Settings },
 ];
 
 export default function Sidebar() {

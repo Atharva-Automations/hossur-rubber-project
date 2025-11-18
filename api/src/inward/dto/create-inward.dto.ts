@@ -1,24 +1,38 @@
-import { BaseDto } from '../../common/dto/base.dto';
 import {
   IsString,
   IsOptional,
   IsBoolean,
   IsDateString,
   IsNumber,
+  IsEnum,
+  IsPositive,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
-export class CreateInwardDto extends BaseDto {
+export enum UnitType {
+  KG = 'KG',
+  L = 'L',
+}
+
+export class CreateInwardDto {
+  @IsString()
+  materialName!: string;
+
   @IsString()
   supplierName!: string;
 
+  @IsEnum(UnitType)
+  unit!: UnitType;
+
   @Type(() => Number)
   @IsNumber()
+  @IsPositive()
   quantity!: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @IsPositive()
   bagWeight?: number;
 
   @IsOptional()
