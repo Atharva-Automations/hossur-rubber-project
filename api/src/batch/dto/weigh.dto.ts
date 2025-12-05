@@ -1,4 +1,3 @@
-// src/batch/dto/weigh.dto.ts
 import { IsInt, IsNumber, IsOptional, IsPositive } from 'class-validator';
 
 export class WeighDto {

@@ -1,3 +1,4 @@
+// @ts-ignore – Prisma type doesn't expose relation ordering, but it works at runtime
 generator client {
   provider = "prisma-client-js"
 }
@@ -36,6 +37,15 @@ enum BatchStatus {
   COMPLETED
 }
 
+enum ProductExecutionStatus {
+  CREATED
+  WEIGHING_IN_PROGRESS
+  WEIGHING_COMPLETED
+  STEP_IN_PROGRESS
+  STEP_COMPLETED
+  PRODUCT_COMPLETED
+}
+
 enum StepExecutionStatus {
   PENDING
   READY
@@ -47,6 +57,12 @@ enum BagStatus {
   CREATED
   SCANNED
   CONSUMED
+}
+
+enum BulkSeedStatus {
+  CREATED // generated, not used yet
+  SCANNED // QR scanned at weighing station
+  WEIGHED // weight confirmed, WeighedBag row created
 }
 
 // ─────────────────────────────────────────────
@@ -86,9 +102,12 @@ model InwardQrCode {
   printed             Boolean   @default(false)
   scannedAtOutward    DateTime?
   scannedAtProduction DateTime?
+  consumedAt          DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
+
+  weighedBags WeighedBag[]
 
   // Optional: quick lookup index (not required—tag already unique)
   // @@index([tag])
@@ -192,6 +211,9 @@ model RecipeStep {
   rpm            Float
 
   ingredients StepIngredient[]
+  batchSteps  BatchStep[]
+
+  @@index([recipeId])
 }
 
 // ─────────────────────────────────────────────
@@ -213,17 +235,32 @@ model StepIngredient {
 // Batch — main production batch record linking recipe, steps, and execution
 // ─────────────────────────────────────────────
 model Batch {
-  id        Int         @id @default(autoincrement())
-  recipeId  Int
-  quantity  Int
-  status    BatchStatus @default(CREATED)
-  createdAt DateTime    @default(now())
+  id       Int         @id @default(autoincrement())
+  recipeId Int
+  quantity Int
+  status   BatchStatus @default(CREATED)
 
-  recipe         Recipe          @relation(fields: [recipeId], references: [id])
-  steps          BatchStep[]
-  weighedBags    WeighedBag[]
-  executionScans ExecutionScan[]
-  finalProducts  FinalProduct[]
+  // Track which steps will be executed in this batch
+  executeKneader Boolean @default(true)
+  executeMixer   Boolean @default(true)
+
+  // Weighing strategy: ONE_BY_ONE (sequential) or BULK (all at once)
+  // This affects both QR printing and ingredient weighing process
+  // ONE_BY_ONE: Print 1 QR → weigh 1 ingredient → move to next
+  // BULK: Print all QRs first → then weigh ingredients in any order
+  weighingStrategy String @default("ONE_BY_ONE") // ONE_BY_ONE or BULK
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  recipe            Recipe             @relation(fields: [recipeId], references: [id])
+  steps             BatchStep[]
+  weighedBags       WeighedBag[]
+  executionScans    ExecutionScan[]
+  finalProducts     FinalProduct[]
+  productExecutions ProductExecution[]
+  bulkSeeds         BulkWeighingSeed[]
+  finalBatch        FinalBatch?
 }
 
 // ─────────────────────────────────────────────
@@ -232,6 +269,7 @@ model Batch {
 model BatchStep {
   id             Int                 @id @default(autoincrement())
   batchId        Int
+  recipeStepId   Int? // Link back to original recipe step for audit
   stepType       StepType // KNEADER or MIXING (Ref from Recipe DTO enum)
   sequenceNumber Int
   timerSeconds   Int
@@ -240,12 +278,19 @@ model BatchStep {
   rpm            Float
   status         StepExecutionStatus @default(PENDING)
 
-  batch          Batch             @relation(fields: [batchId], references: [id])
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  batch          Batch              @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  recipeStep     RecipeStep?        @relation(fields: [recipeStepId], references: [id])
   ingredients    BatchIngredient[]
   weighedBags    WeighedBag[]
   executionScans ExecutionScan[]
+  stepExecutions StepExecution[]
+  bulkSeeds      BulkWeighingSeed[]
 
   @@index([batchId])
+  @@index([recipeStepId])
 }
 
 // ─────────────────────────────────────────────
@@ -255,37 +300,78 @@ model BatchIngredient {
   id              Int    @id @default(autoincrement())
   batchStepId     Int
   ingredientId    Int
-  quantityPerUnit Float
-  totalQuantity   Float
+  quantityPerUnit Float // Per single product unit
+  totalQuantity   Float // Total for all units in batch
   unit            String
+  sequenceInStep  Int    @default(1) // Order in which this ingredient appears in the step
 
-  batchStep  BatchStep  @relation(fields: [batchStepId], references: [id])
-  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+  batchStep      BatchStep          @relation(fields: [batchStepId], references: [id], onDelete: Cascade)
+  ingredient     Ingredient         @relation(fields: [ingredientId], references: [id])
+  weighedBags    WeighedBag[]
+  executionScans ExecutionScan[]
+  bulkSeeds      BulkWeighingSeed[]
 
-  weighedBags WeighedBag[]
-
+  @@unique([batchStepId, sequenceInStep])
   @@index([batchStepId])
   @@index([ingredientId])
 }
 
 // ─────────────────────────────────────────────
 // WeighedBag — individual bags weighed during production batch steps
+// Each bag gets a NEW INDEPENDENT QR (not related to inward QR)
 // ─────────────────────────────────────────────
 model WeighedBag {
-  id                Int       @id @default(autoincrement())
-  qrId              String    @unique
-  batchId           Int
-  batchStepId       Int
-  batchIngredientId Int
-  weight            Float
-  status            BagStatus @default(CREATED)
-  createdAt         DateTime  @default(now())
+  id                 Int       @id @default(autoincrement())
+  qrId               String    @unique
+  batchId            Int
+  productExecutionId Int // Which product (1 of 10, 2 of 10, etc.)
+  batchStepId        Int
+  batchIngredientId  Int
+  weight             Float
+  status             BagStatus @default(CREATED)
 
-  batch           Batch           @relation(fields: [batchId], references: [id])
-  batchStep       BatchStep       @relation(fields: [batchStepId], references: [id])
-  batchIngredient BatchIngredient @relation(fields: [batchIngredientId], references: [id])
+  scannedForVerification DateTime? // When was this bag scanned before adding to bin/mixer
+  addedToBinAt           DateTime? // When was this bag actually added to bin
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batch            Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  productExecution ProductExecution @relation(fields: [productExecutionId], references: [id], onDelete: Cascade)
+  batchStep        BatchStep        @relation(fields: [batchStepId], references: [id], onDelete: Cascade)
+  batchIngredient  BatchIngredient  @relation(fields: [batchIngredientId], references: [id], onDelete: Cascade)
+  InwardQrCode     InwardQrCode?    @relation(fields: [inwardQrCodeId], references: [id])
+  inwardQrCodeId   Int?
 
   @@index([batchId])
+  @@index([productExecutionId])
+  @@index([batchStepId])
+  @@index([batchIngredientId])
+}
+
+// ─────────────────────────────────────────────
+// BulkWeighingSeed - this stores the bulk qrs generated before weighing
+// ─────────────────────────────────────────────
+model BulkWeighingSeed {
+  id   Int    @id @default(autoincrement())
+  qrId String @unique
+
+  batchId            Int
+  productExecutionId Int
+  batchStepId        Int
+  batchIngredientId  Int
+
+  status    BulkSeedStatus @default(CREATED)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  batch            Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  productExecution ProductExecution @relation(fields: [productExecutionId], references: [id], onDelete: Cascade)
+  batchStep        BatchStep        @relation(fields: [batchStepId], references: [id], onDelete: Cascade)
+  batchIngredient  BatchIngredient  @relation(fields: [batchIngredientId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([productExecutionId])
   @@index([batchStepId])
   @@index([batchIngredientId])
 }
@@ -294,16 +380,71 @@ model WeighedBag {
 // ExecutionScan — tracks QR code scans during batch step execution
 // ─────────────────────────────────────────────
 model ExecutionScan {
-  id          Int      @id @default(autoincrement())
-  qrId        String
-  batchId     Int
-  batchStepId Int
-  scannedAt   DateTime @default(now())
+  id                 Int      @id @default(autoincrement())
+  qrId               String
+  batchId            Int
+  productExecutionId Int
+  batchStepId        Int
+  batchIngredientId  Int // Which ingredient being added
+  sequenceInStep     Int // Order of ingredient in this step
+  scannedAt          DateTime @default(now())
 
-  batch     Batch     @relation(fields: [batchId], references: [id])
-  batchStep BatchStep @relation(fields: [batchStepId], references: [id])
+  batch            Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  productExecution ProductExecution @relation(fields: [productExecutionId], references: [id], onDelete: Cascade)
+  batchStep        BatchStep        @relation(fields: [batchStepId], references: [id], onDelete: Cascade)
+  batchIngredient  BatchIngredient  @relation(fields: [batchIngredientId], references: [id], onDelete: Cascade)
 
   @@index([batchId])
+  @@index([productExecutionId])
+  @@index([batchStepId])
+}
+
+// ─────────────────────────────────────────────
+// ProductExecution — tracks a single product's execution within a batch
+// ─────────────────────────────────────────────
+model ProductExecution {
+  id              Int                    @id @default(autoincrement())
+  batchId         Int
+  productSequence Int // Which product in batch (1, 2, 3... 10)
+  status          ProductExecutionStatus @default(CREATED)
+
+  weighingStartedAt    DateTime?
+  weighingCompletedAt  DateTime?
+  executionStartedAt   DateTime?
+  executionCompletedAt DateTime?
+
+  batch          Batch              @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  weighedBags    WeighedBag[]
+  executionScans ExecutionScan[]
+  stepExecutions StepExecution[]
+  finalProduct   FinalProduct[]
+  bulkSeeds      BulkWeighingSeed[]
+
+  @@unique([batchId, productSequence])
+  @@index([batchId])
+}
+
+// ─────────────────────────────────────────────
+// StepExecution — tracks execution of each step for each product
+// ─────────────────────────────────────────────
+model StepExecution {
+  id                 Int @id @default(autoincrement())
+  productExecutionId Int
+  batchStepId        Int
+
+  status      StepExecutionStatus @default(PENDING)
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  // Track all ingredients added in this step for this product
+  ingredientsAdded    Int @default(0)
+  ingredientsExpected Int
+
+  productExecution ProductExecution @relation(fields: [productExecutionId], references: [id], onDelete: Cascade)
+  batchStep        BatchStep        @relation(fields: [batchStepId], references: [id], onDelete: Cascade)
+
+  @@unique([productExecutionId, batchStepId])
+  @@index([productExecutionId])
   @@index([batchStepId])
 }
 
@@ -311,12 +452,30 @@ model ExecutionScan {
 // FinalProduct — finished goods after batch completion
 // ─────────────────────────────────────────────
 model FinalProduct {
+  id                 Int      @id @default(autoincrement())
+  batchId            Int
+  productExecutionId Int
+  productSequence    Int // Which product in batch (1, 2, 3... 10)
+  qrId               String   @unique
+  binId              String? // If applicable, which bin it was completed in
+  completedAt        DateTime @default(now())
+  createdAt          DateTime @default(now())
+
+  batch            Batch            @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  productExecution ProductExecution @relation(fields: [productExecutionId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([productExecutionId])
+}
+
+//
+//
+//
+model FinalBatch {
   id        Int      @id @default(autoincrement())
-  batchId   Int
-  qrId      String   @unique
+  batchId   Int      @unique
+  qrId      String
   createdAt DateTime @default(now())
 
   batch Batch @relation(fields: [batchId], references: [id])
-
-  @@index([batchId])
 }

@@ -1,45 +1,76 @@
-// src/batch/batch.service.ts
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Injectable,
   BadRequestException,
   NotFoundException,
-  Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBatchDto } from './dto/create-batch.dto';
-// import { WeighDto } from './dto/weigh.dto';
-import { UpdateBatchDto } from './dto/update-batch.dto';
-// import { ScanDto } from './dto/scan.dto';
+import {
+  StartStepDto,
+  ScanExecutionDto,
+  CompleteStepDto,
+  FinalizeProductDto,
+} from './dto/execution-step.dto';
+
+type BatchWithWeighingRelations = Prisma.BatchGetPayload<{
+  include: {
+    steps: {
+      include: {
+        ingredients: {
+          include: { ingredient: { include: { bins: true } } };
+        };
+      };
+    };
+    productExecutions: true;
+  };
+}>;
+
+type BatchWithExecutions = Prisma.BatchGetPayload<{
+  include: {
+    productExecutions: true;
+  };
+}>;
+
+type ProductWithSteps = Prisma.ProductExecutionGetPayload<{
+  include: { stepExecutions: true };
+}>;
 
 @Injectable()
 export class BatchService {
-  private readonly logger = new Logger(BatchService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
-  // list all batches (with some relations)
+  private async getOrderedStepExecutionsForProduct(productExecutionId: number) {
+    return this.prisma.stepExecution.findMany({
+      where: { productExecutionId },
+      include: { batchStep: true },
+      orderBy: {
+        batchStep: {
+          sequenceNumber: 'asc',
+        },
+      } as any,
+    });
+  }
+
+  // batch creation, updation and deletion helpers
+
   async findAll() {
     return this.prisma.batch.findMany({
       include: {
         recipe: true,
-        steps: {
-          include: {
-            ingredients: { include: { ingredient: true } },
-          },
-        },
+        steps: { include: { ingredients: { include: { ingredient: true } } } },
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  // get one batch (more detailed)
   async findOne(id: number) {
     const batch = await this.prisma.batch.findUnique({
       where: { id },
       include: {
         recipe: true,
         steps: {
-          orderBy: { sequenceNumber: 'asc' },
           include: {
             ingredients: { include: { ingredient: true } },
             weighedBags: true,
@@ -47,48 +78,37 @@ export class BatchService {
           },
         },
         weighedBags: true,
-        finalProducts: true,
       },
     });
     if (!batch) throw new NotFoundException('Batch not found');
     return batch;
   }
 
-  // Create batch: instantiate Batch, BatchSteps, BatchIngredients
   async create(dto: CreateBatchDto) {
-    // fetch recipe and steps
     const recipe = await this.prisma.recipe.findUnique({
       where: { id: dto.recipeId },
       include: {
-        steps: {
-          include: {
-            ingredients: { include: { ingredient: true } },
-          },
-        },
+        steps: { include: { ingredients: { include: { ingredient: true } } } },
       },
     });
     if (!recipe) throw new BadRequestException('Recipe not found');
 
-    // filter steps by selected modules
     const recipeStepsFiltered = recipe.steps.filter(
       (s) =>
         (s.stepType === 'KNEADER' && dto.enableKneader) ||
         (s.stepType === 'MIXING' && dto.enableMixing)
     );
-
-    if (recipeStepsFiltered.length === 0) {
+    if (recipeStepsFiltered.length === 0)
       throw new BadRequestException(
         'No steps selected (enableKneader/enableMixing).'
       );
-    }
 
-    // Use a transaction to create Batch and nested data
     const batch = await this.prisma.$transaction(async (tx) => {
       const createdBatch = await tx.batch.create({
         data: {
           recipeId: dto.recipeId,
           quantity: dto.quantity,
-          status: 'CREATED', // store enum value as string
+          status: 'CREATED',
         },
       });
 
@@ -106,8 +126,7 @@ export class BatchService {
           },
         });
 
-        for (const ri of s.ingredients) {
-          // ri.quantity is recipe per-unit quantity
+        for (const [index, ri] of s.ingredients.entries()) {
           const quantityPerUnit = Number(ri.quantity || 0);
           await tx.batchIngredient.create({
             data: {
@@ -116,740 +135,1330 @@ export class BatchService {
               quantityPerUnit,
               totalQuantity: quantityPerUnit * dto.quantity,
               unit: ri.unit,
-            },
+              sequenceInStep: index + 1,
+            } as any,
           });
         }
       }
-
       return createdBatch;
     });
-
     return batch;
   }
 
-  // Delete
   async delete(id: number) {
     await this.prisma.batch.delete({ where: { id } });
     return { ok: true };
   }
 
-  async findOneWithDetails(batchId: number) {
+  // sequential weighing helpers
+
+  async startExecution(batchId: number) {
+    const existingExecutions = await (
+      this.prisma as any
+    ).productExecution.count({
+      where: { batchId },
+    });
+    if (existingExecutions > 0) {
+      // Already initialized
+      return this.findOne(batchId);
+    }
+
     const batch = await this.prisma.batch.findUnique({
       where: { id: batchId },
+      include: { steps: { include: { ingredients: true } } },
+    });
+    if (!batch) throw new NotFoundException('Batch not found');
+
+    if (batch.weighingStrategy === 'BULK') {
+      throw new BadRequestException(
+        'This batch is configured for BULK weighing. Use /batch/:id/bulk/start.'
+      );
+    }
+
+    // Explicitly type the transaction client as any here because the generated
+    // Prisma types for the interactive transaction client are currently
+    // missing the `productExecution` delegate, even though it exists on
+    // the main `PrismaClient`. At runtime this works correctly since the
+    // delegate is generated from the Prisma schema.
+    await this.prisma.$transaction(async (tx: any) => {
+      for (let i = 1; i <= batch.quantity; i++) {
+        const pe = await tx.productExecution.create({
+          data: {
+            batchId: batch.id,
+            productSequence: i,
+            status: 'CREATED',
+          },
+        });
+
+        for (const step of batch.steps) {
+          await tx.stepExecution.create({
+            data: {
+              productExecutionId: pe.id,
+              batchStepId: step.id,
+              status: 'PENDING',
+              ingredientsExpected: step.ingredients.length,
+            },
+          });
+        }
+      }
+
+      await tx.batch.update({
+        where: { id: batch.id },
+        data: { status: 'WEIGHING' },
+      });
+    });
+
+    return this.findOne(batchId);
+  }
+
+  async getNextWeighingItem(batchId: number) {
+    const batch = (await this.prisma.batch.findUnique({
+      where: { id: batchId },
       include: {
-        recipe: true, // read-only recipe info for UI
         steps: {
+          orderBy: { sequenceNumber: 'asc' },
           include: {
             ingredients: {
-              include: { ingredient: true },
+              // Cast to any to avoid Prisma type mismatch on sequenceInStep
+              orderBy: { sequenceInStep: 'asc' } as any,
+              include: { ingredient: { include: { bins: true } } },
             },
           },
         },
-        weighedBags: true,
-      },
-    });
-    if (!batch) throw new BadRequestException('Batch not found');
-    return batch;
+        productExecutions: {
+          orderBy: { productSequence: 'asc' },
+        },
+      } as any,
+    })) as BatchWithWeighingRelations | null;
+    if (!batch) throw new NotFoundException('Batch not found');
+
+    const totalIngredientsPerProduct = batch.steps.reduce(
+      (acc, step) => acc + step.ingredients.length,
+      0
+    );
+
+    const productExecutions = batch.productExecutions.sort(
+      (a, b) => a.productSequence - b.productSequence
+    );
+
+    for (const pe of productExecutions) {
+      const weighedCount = await this.prisma.weighedBag.count({
+        where: { batchId, productExecutionId: pe.id },
+      });
+
+      if (weighedCount < totalIngredientsPerProduct) {
+        // this is the active product
+        // now find missing ingredient
+      }
+    }
+
+    for (const pe of productExecutions) {
+      const weighedCount = await this.prisma.weighedBag.count({
+        where: { batchId, productExecutionId: pe.id } as any,
+      });
+
+      if (weighedCount >= totalIngredientsPerProduct) {
+        continue;
+      }
+
+      // 1️⃣ Kneader steps first
+      for (const step of batch.steps
+        .filter((s) => s.stepType === 'KNEADER')
+        .sort((a, b) => a.sequenceNumber - b.sequenceNumber)) {
+        for (const bi of step.ingredients.sort(
+          (a, b) => (a as any).sequenceInStep - (b as any).sequenceInStep
+        )) {
+          const existing = await this.prisma.weighedBag.findFirst({
+            where: {
+              batchId,
+              productExecutionId: pe.id,
+              batchStepId: step.id,
+              batchIngredientId: bi.id,
+            } as any,
+          });
+
+          if (!existing) {
+            return {
+              batchId,
+              productExecutionId: pe.id,
+              productSequence: pe.productSequence,
+              batchStepId: step.id,
+              batchIngredientId: bi.id,
+              stepType: step.stepType,
+              stepSequenceNumber: step.sequenceNumber,
+              ingredientId: bi.ingredientId,
+              ingredientCode: bi.ingredient?.ingredientCode ?? '',
+              ingredientName: bi.ingredient?.name ?? '',
+              binNumber: bi.ingredient?.bins?.[0]?.binNumber ?? null,
+              requiredWeight: bi.quantityPerUnit,
+              unit: bi.unit,
+              sequenceInStep: (bi as any).sequenceInStep,
+            };
+          }
+        }
+      }
+
+      // 2️⃣ Mixer steps after kneader
+      for (const step of batch.steps
+        .filter((s) => s.stepType === 'MIXING')
+        .sort((a, b) => a.sequenceNumber - b.sequenceNumber)) {
+        for (const bi of step.ingredients.sort(
+          (a, b) => (a as any).sequenceInStep - (b as any).sequenceInStep
+        )) {
+          const existing = await this.prisma.weighedBag.findFirst({
+            where: {
+              batchId,
+              productExecutionId: pe.id,
+              batchStepId: step.id,
+              batchIngredientId: bi.id,
+            } as any,
+          });
+
+          if (!existing) {
+            return {
+              batchId,
+              productExecutionId: pe.id,
+              productSequence: pe.productSequence,
+              batchStepId: step.id,
+              batchIngredientId: bi.id,
+              stepType: step.stepType,
+              stepSequenceNumber: step.sequenceNumber,
+              ingredientId: bi.ingredientId,
+              ingredientCode: bi.ingredient?.ingredientCode ?? '',
+              ingredientName: bi.ingredient?.name ?? '',
+              binNumber: bi.ingredient?.bins?.[0]?.binNumber ?? null,
+              requiredWeight: bi.quantityPerUnit,
+              unit: bi.unit,
+              sequenceInStep: (bi as any).sequenceInStep,
+            };
+          }
+        }
+      }
+
+      return null; // all done
+    }
+
+    return null;
   }
 
-  // Update only batch-level and step/ingredient runtime fields
-  // async updateBatch(batchId: number, dto: UpdateBatchDto) {
-  //   const batch = await this.prisma.batch.findUnique({
-  //     where: { id: batchId },
-  //     include: { steps: { include: { ingredients: true } } },
-  //   });
-  //   if (!batch) throw new BadRequestException('Batch not found');
-
-  //   // 1) Update batch meta (quantity and module flags)
-  //   await this.prisma.batch.update({
-  //     where: { id: batchId },
-  //     data: {
-  //       quantity: dto.quantity,
-  //       // status unchanged, createdAt unchanged
-  //     },
-  //   });
-
-  //   // 2) Update each BatchStep and its BatchIngredient children
-  //   // We assume the client sends only existing step IDs (we're editing, not creating new steps here)
-  //   for (const s of dto.steps) {
-  //     // update step fields
-  //     await this.prisma.batchStep.update({
-  //       where: { id: s.id },
-  //       data: {
-  //         timerSeconds: s.timerSeconds,
-  //         pressure: s.pressure,
-  //         temperature: s.temperature,
-  //         rpm: s.rpm,
-  //       },
-  //     });
-
-  //     // update each ingredient (by its BatchIngredient id)
-  //     for (const bi of s.ingredients) {
-  //       await this.prisma.batchIngredient.update({
-  //         where: { id: bi.id },
-  //         data: {
-  //           quantityPerUnit: bi.quantityPerUnit,
-  //           unit: bi.unit ?? undefined,
-  //           // if you have totalQuantity derived, you can recalc here: totalQuantity = quantityPerUnit * batch.quantity
-  //         },
-  //       });
-  //     }
-  //   }
-
-  //   // 3) Optionally recalc totals for each BatchIngredient (if you want to persist totalQuantity)
-  //   const updatedBatch = await this.prisma.batch.findUnique({
-  //     where: { id: batchId },
-  //     include: { steps: { include: { ingredients: true } } },
-  //   });
-
-  //   // recalc totalQuantity for each BatchIngredient = quantityPerUnit * batch.quantity
-  //   if (updatedBatch) {
-  //     for (const step of updatedBatch.steps) {
-  //       for (const bi of step.ingredients) {
-  //         const newTotal =
-  //           (bi.quantityPerUnit || 0) * (updatedBatch.quantity || 1);
-  //         await this.prisma.batchIngredient.update({
-  //           where: { id: bi.id },
-  //           data: { totalQuantity: newTotal },
-  //         });
-  //       }
-  //     }
-  //   }
-
-  //   return { success: true };
-  // }
-
-  // async updateBatch(batchId: number, dto: any) {
-  //   // Basic validation
-  //   if (!Number.isInteger(batchId) || batchId <= 0) {
-  //     throw new BadRequestException('Invalid batch id');
-  //   }
-  //   if (!dto || typeof dto !== 'object') {
-  //     throw new BadRequestException('Missing request body');
-  //   }
-  //   if (!Array.isArray(dto.steps)) {
-  //     throw new BadRequestException('steps must be an array');
-  //   }
-
-  //   // Helper: normalize ingredient payload for Prisma
-  //   const buildIngredientData = (ing: any) => {
-  //     // Accept either `quantity` or `quantityPerUnit` from client
-  //     const rawQty =
-  //       ing.quantityPerUnit ?? // preferred if client provided explicitly
-  //       ing.quantity ?? // fallback
-  //       0;
-  //     const qtyNum = Number(rawQty ?? 0);
-  //     if (!Number.isFinite(qtyNum)) {
-  //       throw new BadRequestException('Ingredient quantity must be a number');
-  //     }
-
-  //     // Always set quantityPerUnit for DB (your schema expects this)
-  //     const data: any = {
-  //       ingredientId: ing.ingredientId ?? undefined,
-  //       quantityPerUnit: qtyNum,
-  //       unit: ing.unit ?? undefined,
-  //     };
-
-  //     return data;
-  //   };
-
-  //   // Load existing steps + their ingredients for this batch
-  //   const existingSteps = await this.prisma.batchStep.findMany({
-  //     where: { batchId },
-  //     include: { ingredients: true },
-  //   });
-
-  //   const existingStepMap = new Map<number, any>();
-  //   for (const s of existingSteps) existingStepMap.set(s.id, s);
-
-  //   // Which step IDs are incoming (valid integers)
-  //   const incomingStepIds = new Set<number>();
-  //   for (const s of dto.steps) {
-  //     if (s && s.id != null) {
-  //       const sid = Number(s.id);
-  //       if (Number.isInteger(sid) && sid > 0) incomingStepIds.add(sid);
-  //     }
-  //   }
-
-  //   // Determine deletes for steps that were removed client-side
-  //   const toDeleteStepIds = existingSteps
-  //     .map((s) => s.id)
-  //     .filter((id) => !incomingStepIds.has(id));
-
-  //   // Build Prisma ops
-  //   const ops: any[] = [];
-
-  //   // Delete removed steps (and rely on cascade or explicit ingredient deletes if needed)
-  //   if (toDeleteStepIds.length) {
-  //     ops.push(
-  //       this.prisma.batchStep.deleteMany({
-  //         where: { id: { in: toDeleteStepIds } },
-  //       })
-  //     );
-  //   }
-
-  //   // For each incoming step: update existing or create new
-  //   for (const stepDto of dto.steps) {
-  //     if (!stepDto || typeof stepDto !== 'object') continue;
-
-  //     // Normalize step numeric fields
-  //     const stepData: any = {
-  //       stepType: stepDto.stepType,
-  //       sequenceNumber:
-  //         stepDto.sequenceNumber !== undefined
-  //           ? Number(stepDto.sequenceNumber)
-  //           : 0,
-  //       timerSeconds:
-  //         stepDto.timerSeconds !== undefined ? Number(stepDto.timerSeconds) : 0,
-  //       pressure:
-  //         stepDto.pressure !== undefined ? Number(stepDto.pressure) : undefined,
-  //       temperature:
-  //         stepDto.temperature !== undefined
-  //           ? Number(stepDto.temperature)
-  //           : undefined,
-  //       rpm: stepDto.rpm !== undefined ? Number(stepDto.rpm) : undefined,
-  //     };
-
-  //     // If valid id present -> update
-  //     const maybeStepId = stepDto.id != null ? Number(stepDto.id) : NaN;
-  //     const hasValidStepId = Number.isInteger(maybeStepId) && maybeStepId > 0;
-
-  //     if (hasValidStepId && existingStepMap.has(maybeStepId)) {
-  //       const stepId = maybeStepId;
-
-  //       // Update step record
-  //       ops.push(
-  //         this.prisma.batchStep.update({
-  //           where: { id: stepId },
-  //           data: stepData,
-  //         })
-  //       );
-
-  //       // Sync step ingredients: compute deletes, updates, creates
-  //       const existingStep = existingStepMap.get(stepId);
-  //       const existingIngMap = new Map<number, any>();
-  //       (existingStep.ingredients || []).forEach((ing: any) =>
-  //         existingIngMap.set(ing.id, ing)
-  //       );
-
-  //       // incoming ingredient ids
-  //       const incomingIngIds = new Set<number>();
-  //       for (const ing of stepDto.ingredients || []) {
-  //         if (ing && ing.id != null) {
-  //           const iid = Number(ing.id);
-  //           if (Number.isInteger(iid) && iid > 0) incomingIngIds.add(iid);
-  //         }
-  //       }
-
-  //       // delete removed ingredients
-  //       const toDeleteIngIds = (existingStep.ingredients || [])
-  //         .map((i: any) => i.id)
-  //         .filter((id: number) => !incomingIngIds.has(id));
-  //       if (toDeleteIngIds.length) {
-  //         ops.push(
-  //           this.prisma.stepIngredient.deleteMany({
-  //             where: { id: { in: toDeleteIngIds } },
-  //           })
-  //         );
-  //       }
-
-  //       // update existing ing or create new
-  //       for (const ingDto of stepDto.ingredients || []) {
-  //         if (!ingDto) continue;
-  //         const maybeIngId = ingDto.id != null ? Number(ingDto.id) : NaN;
-  //         const hasValidIngId = Number.isInteger(maybeIngId) && maybeIngId > 0;
-
-  //         const ingPayload = buildIngredientData(ingDto);
-
-  //         if (hasValidIngId && existingIngMap.has(maybeIngId)) {
-  //           // Update
-  //           ops.push(
-  //             this.prisma.stepIngredient.update({
-  //               where: { id: maybeIngId },
-  //               data: ingPayload,
-  //             })
-  //           );
-  //         } else {
-  //           // Create - ensure stepId present
-  //           ops.push(
-  //             this.prisma.stepIngredient.create({
-  //               data: {
-  //                 stepId,
-  //                 ...ingPayload,
-  //               },
-  //             })
-  //           );
-  //         }
-  //       }
-  //     } else {
-  //       // Create new step with nested ingredients
-  //       const createStepIngredients = (stepDto.ingredients || []).map(
-  //         (ing: any) => buildIngredientData(ing)
-  //       );
-
-  //       interface StepIngredientData {
-  //         ingredientId?: number;
-  //         quantityPerUnit: number;
-  //         unit?: string;
-  //       }
-
-  //       ops.push(
-  //         this.prisma.batchStep.create({
-  //           data: {
-  //             batchId,
-  //             stepType: stepData.stepType as any,
-  //             sequenceNumber: stepData.sequenceNumber,
-  //             timerSeconds: stepData.timerSeconds,
-  //             pressure: stepData.pressure,
-  //             temperature: stepData.temperature,
-  //             rpm: stepData.rpm,
-  //             // nested create ingredients
-  //             ingredients: {
-  //               create: createStepIngredients.map((p: StepIngredientData) => ({
-  //                 ...p,
-  //               })),
-  //             },
-  //           },
-  //         })
-  //       );
-  //     }
-  //   } // end for each stepDto
-
-  //   // Update top-level batch fields (only include allowed fields)
-  //   const batchUpdateData: any = {};
-  //   if (dto.quantity !== undefined) {
-  //     const q = Number(dto.quantity);
-  //     if (!Number.isFinite(q) || !Number.isInteger(q)) {
-  //       throw new BadRequestException('quantity must be an integer number');
-  //     }
-  //     batchUpdateData.quantity = q;
-  //   }
-  //   if (dto.status !== undefined) {
-  //     batchUpdateData.status = dto.status;
-  //   }
-  //   // if you allow toggling enableKneader/enableMixing on batch record, include them:
-  //   if (dto.enableKneader !== undefined)
-  //     batchUpdateData.enableKneader = !!dto.enableKneader;
-  //   if (dto.enableMixing !== undefined)
-  //     batchUpdateData.enableMixing = !!dto.enableMixing;
-
-  //   if (Object.keys(batchUpdateData).length) {
-  //     ops.push(
-  //       this.prisma.batch.update({
-  //         where: { id: batchId },
-  //         data: batchUpdateData,
-  //       })
-  //     );
-  //   }
-
-  //   // execute transaction
-  //   try {
-  //     await this.prisma.$transaction(ops);
-  //   } catch (err) {
-  //     this.logger.error('updateBatch transaction failed', err as any);
-  //     // rethrow the error so controller returns 500 / proper message
-  //     throw err;
-  //   }
-
-  //   // return the refreshed batch
-  //   return this.prisma.batch.findUnique({
-  //     where: { id: batchId },
-  //     include: {
-  //       steps: {
-  //         include: {
-  //           ingredients: {
-  //             include: {
-  //               ingredient: true, // if you want nested ingredient info
-  //             },
-  //           },
-  //         },
-  //       },
-  //     },
-  //   });
-  // }
-
-  async updateBatch(batchId: number, dto: any) {
-    // Basic validation
-    if (!Number.isInteger(batchId)) {
-      throw new BadRequestException('Invalid batch id');
-    }
-    if (!dto || typeof dto !== 'object') {
-      throw new BadRequestException('Invalid payload');
-    }
-    if (!Array.isArray(dto.steps)) {
-      throw new BadRequestException('steps must be an array');
+  async weighIngredient(
+    batchId: number,
+    dto: import('./dto/weigh.dto').WeighDto
+  ) {
+    if (dto.batchId && dto.batchId !== batchId) {
+      throw new BadRequestException('Batch ID mismatch');
     }
 
-    // Ensure batch exists
-    const existingBatch = await this.prisma.batch.findUnique({
+    const batch = (await this.prisma.batch.findUnique({
       where: { id: batchId },
+      include: {
+        productExecutions: { orderBy: { productSequence: 'asc' } },
+      },
+    })) as BatchWithExecutions | null;
+
+    if (!batch) throw new NotFoundException('Batch not found');
+
+    const productExecutions = [...batch.productExecutions].sort(
+      (a, b) => a.productSequence - b.productSequence
+    );
+
+    // calculate total ingredients
+    const stepsWithIngredients = await this.prisma.batchStep.findMany({
+      where: { batchId },
+      include: { ingredients: true },
     });
-    if (!existingBatch) {
-      throw new BadRequestException('Batch not found');
+
+    const totalIngredientsPerProduct = stepsWithIngredients.reduce(
+      (acc, step) => acc + step.ingredients.length,
+      0
+    );
+
+    // find the first product where weighing is not completed
+    let activeProduct: (typeof productExecutions)[number] | null = null;
+    for (const p of productExecutions) {
+      const count = await this.prisma.weighedBag.count({
+        where: { batchId, productExecutionId: p.id },
+      });
+
+      if (count < totalIngredientsPerProduct) {
+        activeProduct = p;
+        break;
+      }
     }
 
-    // Transactional update to keep DB consistent
-    const updated = await this.prisma.$transaction(async (tx) => {
-      // 1) Load existing steps and their batch-ingredients etc.
-      const existingSteps = await tx.batchStep.findMany({
-        where: { batchId },
-        include: { ingredients: true }, // ingredients here are BatchIngredient rows
+    if (!activeProduct) {
+      throw new BadRequestException('All products are already weighed!');
+    }
+
+    const batchIngredient = await this.prisma.batchIngredient.findUnique({
+      where: { id: dto.batchIngredientId },
+      include: { batchStep: true },
+    });
+    if (
+      !batchIngredient ||
+      batchIngredient.batchStepId !== dto.batchStepId ||
+      batchIngredient.batchStep.batchId !== batchId
+    ) {
+      throw new BadRequestException('Invalid step/ingredient for this batch');
+    }
+
+    if (dto.weight !== batchIngredient.quantityPerUnit) {
+      throw new BadRequestException('Weight does not match required quantity');
+    }
+
+    return this.prisma.$transaction(async (tx: any) => {
+      const existing = await tx.weighedBag.findFirst({
+        where: {
+          batchId,
+          productExecutionId: activeProduct.id,
+          batchStepId: dto.batchStepId,
+          batchIngredientId: dto.batchIngredientId,
+        } as any,
       });
-      const existingStepMap = new Map<number, any>();
-      for (const s of existingSteps) existingStepMap.set(s.id, s);
+      if (existing) {
+        throw new BadRequestException(
+          'Ingredient already weighed for this product'
+        );
+      }
 
-      // 2) Determine which steps were removed by client
-      const incomingStepIds = new Set<number>();
-      for (const s of dto.steps) if (s.id) incomingStepIds.add(Number(s.id));
-      const toDeleteStepIds = existingSteps
-        .map((s) => s.id)
-        .filter((id) => !incomingStepIds.has(id));
+      const qrId =
+        dto.label ??
+        `WB-BATCH${batchId}-P${activeProduct.productSequence}-S${
+          dto.batchStepId
+        }-I${dto.batchIngredientId}-${Date.now()}`;
 
-      // 3) For steps to delete: delete dependent rows BEFORE deleting the step
-      if (toDeleteStepIds.length > 0) {
-        // delete weighed bags referencing these steps
-        await tx.weighedBag.deleteMany({
-          where: { batchStepId: { in: toDeleteStepIds } },
-        });
+      const weighedBag = await tx.weighedBag.create({
+        data: {
+          qrId,
+          batchId,
+          productExecutionId: activeProduct.id,
+          batchStepId: dto.batchStepId,
+          batchIngredientId: dto.batchIngredientId,
+          weight: dto.weight,
+          status: 'CREATED',
+        } as any,
+      });
 
-        // delete execution scans referencing these steps
-        await tx.executionScan.deleteMany({
-          where: { batchStepId: { in: toDeleteStepIds } },
-        });
+      // Update product execution status (weighing started/completed)
+      const stepsWithIngredients = await tx.batchStep.findMany({
+        where: { batchId },
+        include: { ingredients: true },
+      });
+      const totalIngredientsPerProduct = stepsWithIngredients.reduce(
+        (acc: number, s: any) => acc + s.ingredients.length,
+        0
+      );
 
-        // delete batchIngredients for these steps
-        await tx.batchIngredient.deleteMany({
-          where: { batchStepId: { in: toDeleteStepIds } },
-        });
+      // Recount AFTER inserting the weighed bag
+      const newCount = await tx.weighedBag.count({
+        where: { batchId, productExecutionId: activeProduct.id },
+      });
 
-        // finally delete the batch steps
-        await tx.batchStep.deleteMany({
-          where: { id: { in: toDeleteStepIds } },
+      const statusUpdate: any = {};
+
+      // First weighing ever → mark start
+      if (!activeProduct.weighingStartedAt) {
+        statusUpdate.weighingStartedAt = new Date();
+        statusUpdate.status = 'WEIGHING_IN_PROGRESS';
+      }
+
+      // Last weighing → NOW mark completed
+      if (newCount >= totalIngredientsPerProduct) {
+        statusUpdate.weighingCompletedAt = new Date();
+        statusUpdate.status = 'WEIGHING_COMPLETED';
+      }
+
+      if (Object.keys(statusUpdate).length > 0) {
+        await tx.productExecution.update({
+          where: { id: activeProduct.id },
+          data: statusUpdate,
         });
       }
 
-      // 4) Process incoming steps (update existing OR create new)
-      for (const stepDto of dto.steps) {
-        const stepType = stepDto.stepType;
-        const sequenceNumber = Number(stepDto.sequenceNumber ?? 0);
-        const timerSeconds = Number(stepDto.timerSeconds ?? 0);
-        const pressure =
-          stepDto.pressure === undefined ? undefined : Number(stepDto.pressure);
-        const temperature =
-          stepDto.temperature === undefined
-            ? undefined
-            : Number(stepDto.temperature);
-        const rpm = stepDto.rpm === undefined ? undefined : Number(stepDto.rpm);
+      return weighedBag;
+    });
+  }
 
-        if (stepDto.id) {
-          // existing step -> update
-          const stepId = Number(stepDto.id);
-          if (!existingStepMap.has(stepId)) {
-            throw new BadRequestException(`Step id ${stepId} not found`);
-          }
+  async getWeighedList(batchId: number) {
+    const list = await this.prisma.weighedBag.findMany({
+      where: { batchId },
+      orderBy: [
+        { productExecution: { productSequence: 'asc' } },
+        { batchStep: { sequenceNumber: 'asc' } },
+        { batchIngredient: { sequenceInStep: 'asc' } },
+        { id: 'asc' }, // Always safe fallback
+      ],
+      include: {
+        batchIngredient: {
+          include: { ingredient: true },
+        },
+        batchStep: true,
+        productExecution: true,
+      },
+    });
 
-          await tx.batchStep.update({
-            where: { id: stepId },
+    return list.map((w) => ({
+      id: w.id,
+      qrId: w.qrId,
+      productSequence: w.productExecution.productSequence,
+      ingredientCode: w.batchIngredient.ingredient.ingredientCode,
+      ingredientName: w.batchIngredient.ingredient.name,
+      weight: w.weight,
+      batchStepId: w.batchStepId,
+      batchIngredientId: w.batchIngredientId,
+      sequenceInStep: w.batchIngredient.sequenceInStep,
+      stepType: w.batchStep.stepType, // Add step type (KNEADER or MIXING)
+      stepSequenceNumber: w.batchStep.sequenceNumber, // Add step sequence number
+    }));
+  }
+
+  // bulk weighing helpers
+
+  async startBulkWeighing(batchId: number) {
+    const batch = await this.prisma.batch.findUnique({
+      where: { id: batchId },
+      include: {
+        steps: { include: { ingredients: true } },
+        weighedBags: true,
+        bulkSeeds: true,
+        productExecutions: true,
+      },
+    });
+    if (!batch) throw new NotFoundException('Batch not found');
+
+    // If already used sequential
+    if (
+      batch.weighingStrategy === 'ONE_BY_ONE' &&
+      (batch.weighedBags.length > 0 || batch.status !== 'CREATED')
+    ) {
+      throw new BadRequestException(
+        'Batch already started in SEQUENTIAL mode. Bulk mode not allowed.'
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Ensure product executions exist
+      let productExecutions = await tx.productExecution.findMany({
+        where: { batchId },
+      });
+
+      if (productExecutions.length === 0) {
+        // create same as startExecution does
+        for (let seq = 1; seq <= batch.quantity; seq++) {
+          const pe = await tx.productExecution.create({
             data: {
-              stepType,
-              sequenceNumber,
-              timerSeconds,
-              pressure,
-              temperature,
-              rpm,
+              batchId,
+              productSequence: seq,
+              status: 'CREATED',
             },
           });
 
-          // Sync batchIngredients for this step
-          const existingStep = existingStepMap.get(stepId);
-          const existingIngIds = new Set(
-            (existingStep.ingredients || []).map((i: any) => i.id)
-          );
-          const incomingIngIds = new Set<number>();
-          for (const ing of stepDto.ingredients || [])
-            if (ing.id) incomingIngIds.add(Number(ing.id));
-
-          // Delete removed batchIngredients
-          const toDeleteIngIds = (existingStep.ingredients || [])
-            .map((i: any) => i.id)
-            .filter((id: number) => !incomingIngIds.has(id));
-          if (toDeleteIngIds.length) {
-            // Also delete weighed bags / execution scans linked to those batchIngredients if applicable
-            await tx.weighedBag.deleteMany({
-              where: { batchIngredientId: { in: toDeleteIngIds } },
-            });
-            await tx.batchIngredient.deleteMany({
-              where: { id: { in: toDeleteIngIds } },
+          for (const step of batch.steps) {
+            await tx.stepExecution.create({
+              data: {
+                productExecutionId: pe.id,
+                batchStepId: step.id,
+                status: 'PENDING',
+                ingredientsExpected: step.ingredients.length,
+              },
             });
           }
+        }
 
-          // Update existing or create new batchIngredient rows
-          for (const ing of stepDto.ingredients || []) {
-            const unit = ing.unit ?? 'KG';
-            const ingredientId =
-              ing.ingredientId ?? ing.ingredient?.id ?? undefined;
+        productExecutions = await tx.productExecution.findMany({
+          where: { batchId },
+        });
+      }
 
-            if (ing.id) {
-              await tx.batchIngredient.update({
-                where: { id: Number(ing.id) },
+      // 2. Create seeds for every (product, step, ingredient) combo if missing
+      for (const pe of productExecutions) {
+        for (const step of batch.steps) {
+          for (const bi of step.ingredients) {
+            const existingSeed = await tx.bulkWeighingSeed.findFirst({
+              where: {
+                batchId,
+                productExecutionId: pe.id,
+                batchStepId: step.id,
+                batchIngredientId: bi.id,
+              },
+            });
+
+            if (!existingSeed) {
+              const qrId = `WB-BULK-B${batchId}-P${pe.productSequence}-S${
+                step.id
+              }-I${bi.id}-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
+
+              await tx.bulkWeighingSeed.create({
                 data: {
-                  ingredientId: ingredientId ?? undefined,
-                  quantityPerUnit:
-                    Number(ing.quantityPerUnit ?? 0) || undefined,
-                  totalQuantity: Number(ing.totalQuantity ?? 0) || undefined,
-                  unit,
-                } as any,
-              });
-            } else {
-              await tx.batchIngredient.create({
-                data: {
-                  batchStepId: stepId,
-                  ingredientId: ingredientId ?? undefined,
-                  quantityPerUnit: Number(
-                    ing.quantityPerUnit ?? ing.quantity ?? 0
-                  ),
-                  totalQuantity: Number(ing.totalQuantity ?? 0),
-                  unit,
+                  qrId,
+                  batchId,
+                  productExecutionId: pe.id,
+                  batchStepId: step.id,
+                  batchIngredientId: bi.id,
+                  status: 'CREATED',
                 },
               });
             }
           }
-        } else {
-          // new step -> create with nested batchIngredient creates
-          const createData: any = {
-            batchId,
-            stepType,
-            sequenceNumber,
-            timerSeconds,
-            pressure,
-            temperature,
-            rpm,
-          };
-
-          const ingCreates = (stepDto.ingredients || []).map((ing: any) => ({
-            ingredientId: ing.ingredientId ?? ing.ingredient?.id ?? undefined,
-            quantityPerUnit: Number(ing.quantityPerUnit ?? ing.quantity ?? 0),
-            totalQuantity: Number(ing.totalQuantity ?? 0),
-            unit: ing.unit ?? 'KG',
-          }));
-
-          createData.ingredients = { create: ingCreates };
-
-          await tx.batchStep.create({ data: createData });
-
-          await tx.batchStep.create({ data: createData });
         }
-      } // end steps loop
-
-      // 5) Update top-level batch row
-      const qtyNum = Number(dto.quantity ?? existingBatch.quantity ?? 0);
-      if (!Number.isFinite(qtyNum) || qtyNum < 0) {
-        throw new BadRequestException('Invalid quantity');
       }
 
+      // 3. Mark batch as BULK weighing
       await tx.batch.update({
         where: { id: batchId },
         data: {
-          quantity: Math.trunc(qtyNum),
-          status: dto.status ?? existingBatch.status,
+          status: 'WEIGHING',
+          weighingStrategy: 'BULK',
         },
       });
 
-      // 6) Reload and return updated batch with includes
-      const refreshed = await tx.batch.findUnique({
-        where: { id: batchId },
-        include: {
-          steps: {
-            include: {
-              ingredients: {
-                include: { ingredient: true },
-              },
-            },
-          },
-          recipe: true,
-          weighedBags: true,
-          executionScans: true,
-        },
-      });
-
-      return refreshed;
-    }); // end transaction
-
-    return updated;
+      return { ok: true };
+    });
   }
 
-  // Generate bulk QRs (simulation). Returns cycles grouped by recipe-run index.
-  // Creates WeighedBag records in CREATED state and returns a shape front-end expects.
-  // async generateBulkQrs(batchId: number) {
-  //   const batch = await this.prisma.batch.findUnique({
-  //     where: { id: batchId },
-  //     include: {
-  //       steps: {
-  //         orderBy: { sequenceNumber: 'asc' },
-  //         include: { ingredients: { include: { ingredient: true } } },
-  //       },
-  //     },
-  //   });
-  //   if (!batch) throw new NotFoundException('Batch not found');
+  async getBulkLabelList(batchId: number) {
+    const seeds = await this.prisma.bulkWeighingSeed.findMany({
+      where: { batchId },
+      orderBy: [
+        { productExecution: { productSequence: 'asc' } },
+        { batchStep: { sequenceNumber: 'asc' } },
+        { batchIngredient: { sequenceInStep: 'asc' } },
+      ],
+      include: {
+        productExecution: true,
+        batchStep: true,
+        batchIngredient: {
+          include: { ingredient: { include: { bins: true } } },
+        },
+      },
+    });
 
-  //   // cycles: one cycle per run (1..batch.quantity)
-  //   const cycles: { cycle: number; bags: any[] }[] = [];
+    return seeds.map((s) => ({
+      qrId: s.qrId,
+      productSequence: s.productExecution.productSequence,
+      stepType: s.batchStep.stepType,
+      stepSequenceNumber: s.batchStep.sequenceNumber,
+      ingredientCode: s.batchIngredient.ingredient.ingredientCode,
+      ingredientName: s.batchIngredient.ingredient.name,
+      binNumber: s.batchIngredient.ingredient.bins[0]?.binNumber ?? null,
+      status: s.status,
+    }));
+  }
 
-  //   for (let cycle = 1; cycle <= batch.quantity; cycle++) {
-  //     const bagsThisCycle: any[] = [];
+  async scanBulkQr(batchId: number, qrId: string) {
+    const seed = await this.prisma.bulkWeighingSeed.findUnique({
+      where: { qrId },
+      include: {
+        batch: true,
+        productExecution: true,
+        batchStep: true,
+        batchIngredient: {
+          include: { ingredient: { include: { bins: true } } },
+        },
+      },
+    });
 
-  //     for (const step of batch.steps) {
-  //       for (const ingr of step.ingredients) {
-  //         const qrId = this.generateQrId();
-  //         const wb = await this.prisma.weighedBag.create({
-  //           data: {
-  //             qrId,
-  //             batchId: batch.id,
-  //             batchStepId: step.id,
-  //             batchIngredientId: ingr.id,
-  //             weight: Number(ingr.quantity) || 0,
-  //             status: 'CREATED',
-  //           },
-  //         });
+    if (!seed || seed.batchId !== batchId) {
+      throw new BadRequestException('QR does not belong to this batch');
+    }
 
-  //         bagsThisCycle.push({
-  //           qrId,
-  //           bagId: wb.id,
-  //           stepId: step.id,
-  //           batchIngredientId: ingr.id,
-  //           ingredientCode: ingr.ingredient?.ingredientCode || null,
-  //           ingredientName: ingr.ingredient?.name || null,
-  //           expectedWeight: ingr.quantity,
-  //           unit: ingr.unit,
-  //           sequenceNumber: step.sequenceNumber,
-  //         });
-  //       }
-  //     }
+    if (seed.status === 'WEIGHED') {
+      throw new BadRequestException('This QR has already been weighed');
+    }
 
-  //     cycles.push({ cycle, bags: bagsThisCycle });
-  //   }
+    if (seed.status !== 'SCANNED') {
+      await this.prisma.bulkWeighingSeed.update({
+        where: { id: seed.id },
+        data: { status: 'SCANNED' },
+      });
+    }
 
-  //   return { cycles };
-  // }
+    const bi = seed.batchIngredient;
 
-  // Weigh: one-by-one flow -> creates a WeighedBag (simulate printing) and returns it
-  // async weigh(dto: WeighDto) {
-  //   // ensure batch exists
-  //   const b = await this.prisma.batch.findUnique({
-  //     where: { id: dto.batchId },
-  //   });
-  //   if (!b) throw new NotFoundException('Batch not found');
+    return {
+      batchId: seed.batchId,
+      productExecutionId: seed.productExecutionId,
+      productSequence: seed.productExecution.productSequence,
+      batchStepId: seed.batchStepId,
+      batchIngredientId: seed.batchIngredientId,
+      stepType: seed.batchStep.stepType,
+      stepSequenceNumber: seed.batchStep.sequenceNumber,
+      ingredientId: bi.ingredientId,
+      ingredientCode: bi.ingredient.ingredientCode,
+      ingredientName: bi.ingredient.name,
+      binNumber: bi.ingredient.bins[0]?.binNumber ?? null,
+      requiredWeight: bi.quantityPerUnit,
+      unit: bi.unit,
+      sequenceInStep: bi.sequenceInStep,
+      qrId: seed.qrId,
+      status: seed.status,
+    };
+  }
 
-  //   const qrId = this.generateQrId();
-  //   const wb = await this.prisma.weighedBag.create({
-  //     data: {
-  //       qrId,
-  //       batchId: dto.batchId,
-  //       batchStepId: dto.batchStepId,
-  //       batchIngredientId: dto.batchIngredientId,
-  //       weight: dto.weight,
-  //       status: 'CREATED',
-  //     },
-  //   });
+  async weighBulkIngredient(
+    batchId: number,
+    dto: import('./dto/bulk-weigh.dto').BulkWeighDto
+  ) {
+    const seed = await this.prisma.bulkWeighingSeed.findUnique({
+      where: { qrId: dto.qrId },
+      include: {
+        productExecution: true,
+        batchStep: true,
+        batchIngredient: true,
+      },
+    });
 
-  //   return wb;
-  // }
+    if (!seed || seed.batchId !== batchId) {
+      throw new BadRequestException('QR does not belong to this batch');
+    }
 
-  // Status - aggregated data used in frontend status panel
-  // async status(batchId: number) {
-  //   const batch = await this.prisma.batch.findUnique({
-  //     where: { id: batchId },
-  //     include: {
-  //       steps: {
-  //         orderBy: { sequenceNumber: 'asc' },
-  //         include: {
-  //           ingredients: { include: { ingredient: true } },
-  //           weighedBags: true,
-  //         },
-  //       },
-  //       weighedBags: true,
-  //     },
-  //   });
-  //   if (!batch) throw new NotFoundException('Batch not found');
+    if (seed.status === 'WEIGHED') {
+      throw new BadRequestException('This QR has already been weighed');
+    }
 
-  //   const steps = batch.steps.map((s) => ({
-  //     id: s.id,
-  //     stepType: s.stepType,
-  //     sequenceNumber: s.sequenceNumber,
-  //     timerSeconds: s.timerSeconds,
-  //     status: s.status,
-  //     ingredients: s.ingredients.map((i) => ({
-  //       id: i.id,
-  //       ingredientId: i.ingredientId,
-  //       ingredientCode: i.ingredient?.ingredientCode,
-  //       totalQuantity: i.totalQuantity,
-  //       unit: i.unit,
-  //       weighedCount: 0,
-  //     })),
-  //   }));
+    const bi = await this.prisma.batchIngredient.findUnique({
+      where: { id: seed.batchIngredientId },
+      include: { batchStep: true },
+    });
 
-  //   for (const wb of batch.weighedBags) {
-  //     const st = steps.find((x) => x.id === wb.batchStepId);
-  //     if (!st) continue;
-  //     const ingr = st.ingredients.find((it) => it.id === wb.batchIngredientId);
-  //     if (ingr) ingr.weighedCount = (ingr.weighedCount || 0) + 1;
-  //   }
+    if (!bi || bi.batchStep.batchId !== batchId) {
+      throw new BadRequestException('Invalid ingredient for this batch');
+    }
 
-  //   return {
-  //     id: batch.id,
-  //     recipeId: batch.recipeId,
-  //     quantity: batch.quantity,
-  //     status: batch.status,
-  //     steps,
-  //   };
-  // }
+    if (dto.weight !== bi.quantityPerUnit) {
+      throw new BadRequestException('Weight does not match required quantity');
+    }
 
-  // Scan: incoming qrId -> locate weighedBag -> create ExecutionScan -> mark consumed -> optionally update bin currentQuantity
-  // async scan(dto: ScanDto) {
-  //   const wb = await this.prisma.weighedBag.findUnique({
-  //     where: { qrId: dto.qrId },
-  //     include: {
-  //       batch: true,
-  //       batchStep: true,
-  //       batchIngredient: { include: { ingredient: true } },
-  //     },
-  //   });
-  //   if (!wb) throw new NotFoundException('QR not found');
+    return this.prisma.$transaction(async (tx: any) => {
+      // create weighed bag same as sequential
+      const weighedBag = await tx.weighedBag.create({
+        data: {
+          qrId: seed.qrId,
+          batchId,
+          productExecutionId: seed.productExecutionId,
+          batchStepId: seed.batchStepId,
+          batchIngredientId: seed.batchIngredientId,
+          weight: dto.weight,
+          status: 'CREATED',
+        },
+      });
 
-  //   if (wb.status === 'CONSUMED') {
-  //     return { ok: false, message: 'QR already consumed', qrId: dto.qrId };
-  //   }
+      // mark seed as WEIGHED
+      await tx.bulkWeighingSeed.update({
+        where: { id: seed.id },
+        data: { status: 'WEIGHED' },
+      });
 
-  //   const scan = await this.prisma.executionScan.create({
-  //     data: {
-  //       qrId: dto.qrId,
-  //       batchId: wb.batchId,
-  //       batchStepId: wb.batchStepId,
-  //     },
-  //   });
+      // update ProductExecution status (reuse same idea as sequential)
+      const stepsWithIngredients = await tx.batchStep.findMany({
+        where: { batchId },
+        include: { ingredients: true },
+      });
 
-  //   await this.prisma.weighedBag.update({
-  //     where: { id: wb.id },
-  //     data: { status: 'CONSUMED', scannedAt: new Date() as any },
-  //   });
+      const totalIngredientsPerProduct = stepsWithIngredients.reduce(
+        (acc: number, s: any) => acc + s.ingredients.length,
+        0
+      );
 
-  //   // If a bin assignment exists for the ingredient, increment its currentQuantity
-  //   const bin = await this.prisma.binAssignment.findUnique({
-  //     where: { ingredientId: wb.batchIngredient?.ingredientId ?? -1 },
-  //   });
-  //   if (bin) {
-  //     // increment by wb.weight (careful with units — assume consistent)
-  //     await this.prisma.binAssignment.update({
-  //       where: { id: bin.id },
-  //       data: { currentQuantity: { increment: wb.weight } as any },
-  //     });
-  //   }
+      const weighedCount = await tx.weighedBag.count({
+        where: {
+          batchId,
+          productExecutionId: seed.productExecutionId,
+        },
+      });
 
-  //   return { ok: true, scan };
-  // }
+      const activeProduct = seed.productExecution;
 
-  // small helper
-  private generateQrId(length = 8) {
-    return Math.random().toString(36).substr(2, length);
+      const statusUpdate: any = {};
+      if (!activeProduct.weighingStartedAt) {
+        statusUpdate.weighingStartedAt = new Date();
+        statusUpdate.status = 'WEIGHING_IN_PROGRESS';
+      }
+      if (weighedCount >= totalIngredientsPerProduct) {
+        statusUpdate.weighingCompletedAt = new Date();
+        statusUpdate.status = 'WEIGHING_COMPLETED';
+      }
+
+      if (Object.keys(statusUpdate).length > 0) {
+        await tx.productExecution.update({
+          where: { id: activeProduct.id },
+          data: statusUpdate,
+        });
+      }
+
+      return weighedBag;
+    });
+  }
+
+  // execution helpers
+
+  async startExecutionPhase(batchId: number) {
+    // Optional: just mark batch as EXECUTING so your progress bar can move
+    return this.prisma.batch.update({
+      where: { id: batchId },
+      data: { status: 'EXECUTING' },
+    });
+  }
+
+  async startProductExecution(batchId: number, productExecutionId: number) {
+    const batch = await this.prisma.batch.findUnique({
+      where: { id: batchId },
+      include: { productExecutions: true },
+    });
+
+    const product = batch?.productExecutions.find(
+      (p) => p.id === productExecutionId
+    );
+    if (!product)
+      throw new BadRequestException(
+        'ProductExecution does not belong to this batch'
+      );
+
+    if (product.status !== 'WEIGHING_COMPLETED') {
+      throw new BadRequestException(
+        'Product not ready for execution (must be WEIGHING_COMPLETED)'
+      );
+    }
+
+    const otherActive = batch?.productExecutions.find(
+      (p) => p.id !== product.id && p.status === 'STEP_IN_PROGRESS'
+    );
+    if (otherActive) {
+      throw new BadRequestException(
+        `Another product (P${otherActive.productSequence}) is already in execution`
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedProduct = await tx.productExecution.update({
+        where: { id: product.id },
+        data: {
+          status: 'STEP_IN_PROGRESS',
+          executionStartedAt: product.executionStartedAt ?? new Date(),
+        },
+      });
+
+      const firstStep = await tx.stepExecution.findFirst({
+        where: { productExecutionId: product.id },
+        include: { batchStep: true },
+        orderBy: { batchStep: { sequenceNumber: 'asc' } } as any,
+      });
+
+      const readyStep = await tx.stepExecution.update({
+        where: { id: firstStep?.id },
+        data: { status: 'READY', startedAt: null },
+        include: { batchStep: true },
+      });
+
+      return {
+        productExecutionId: updatedProduct.id,
+        productSequence: updatedProduct.productSequence,
+        status: updatedProduct.status,
+        step: {
+          stepExecutionId: readyStep.id,
+          batchStepId: readyStep.batchStepId,
+          stepType: readyStep.batchStep.stepType,
+          stepSequenceNumber: readyStep.batchStep.sequenceNumber,
+          timerSeconds: readyStep.batchStep.timerSeconds,
+          pressure: readyStep.batchStep.pressure,
+          temperature: readyStep.batchStep.temperature,
+          rpm: readyStep.batchStep.rpm,
+          ingredientsAdded: readyStep.ingredientsAdded,
+          ingredientsExpected: readyStep.ingredientsExpected,
+        },
+      };
+    });
+  }
+
+  async startExecutionStep(batchId: number, dto: StartStepDto) {
+    const product = await this.prisma.productExecution.findFirst({
+      where: { id: dto.productExecutionId, batchId },
+    });
+
+    if (!product) {
+      throw new BadRequestException(
+        'ProductExecution does not belong to this batch'
+      );
+    }
+
+    if (!dto.batchStepId) {
+      throw new BadRequestException('batchStepId is required to start a step');
+    }
+
+    // Product must already be in execution
+    if (product.status !== 'STEP_IN_PROGRESS') {
+      throw new BadRequestException(
+        'Product must be in STEP_IN_PROGRESS to start a step'
+      );
+    }
+
+    const stepExecution = await this.prisma.stepExecution.findFirst({
+      where: {
+        productExecutionId: product.id,
+        batchStepId: dto.batchStepId,
+      },
+      include: { batchStep: true },
+    });
+
+    if (!stepExecution) {
+      throw new BadRequestException(
+        'StepExecution not found for this product/step'
+      );
+    }
+
+    // IMPORTANT: if backend has marked this step as READY, we can start it.
+    // We no longer re-check previous steps here, because the transition
+    // to READY already guarantees the ordering (previous step done).
+    if (stepExecution.status !== 'READY') {
+      throw new BadRequestException('Step is not READY to start');
+    }
+
+    const updated = await this.prisma.stepExecution.update({
+      where: { id: stepExecution.id },
+      data: {
+        status: 'IN_PROGRESS',
+        startedAt: stepExecution.startedAt ?? new Date(),
+      },
+    });
+
+    return {
+      ok: true,
+      stepExecutionId: updated.id,
+      productExecutionId: product.id,
+      status: updated.status,
+    };
+  }
+
+  async scanExecutionQr(batchId: number, dto: ScanExecutionDto) {
+    const bag = await this.prisma.weighedBag.findFirst({
+      where: { qrId: dto.qrId, batchId },
+    });
+
+    if (!bag) {
+      throw new BadRequestException(
+        'Weighed bag not found for this batch / QR'
+      );
+    }
+
+    if (!bag.productExecutionId || !bag.batchStepId || !bag.batchIngredientId) {
+      throw new BadRequestException('Weighed bag is missing execution links');
+    }
+
+    const stepExecution = await this.prisma.stepExecution.findFirst({
+      where: {
+        productExecutionId: bag.productExecutionId,
+        batchStepId: bag.batchStepId,
+      },
+    });
+
+    if (!stepExecution) {
+      throw new BadRequestException('StepExecution not found for scanned QR');
+    }
+
+    if (
+      stepExecution.status !== 'READY' &&
+      stepExecution.status !== 'IN_PROGRESS'
+    ) {
+      throw new BadRequestException(
+        'Step is not ready for scanning ingredients'
+      );
+    }
+
+    // FIX 4: full scan logic + correct counting
+    const existed = await this.prisma.executionScan.findFirst({
+      where: {
+        qrId: dto.qrId,
+        batchId,
+        productExecutionId: bag.productExecutionId,
+        batchStepId: bag.batchStepId,
+        batchIngredientId: bag.batchIngredientId,
+      },
+    });
+
+    if (existed) {
+      throw new BadRequestException('This QR already scanned for this step.');
+    }
+
+    const bi = await this.prisma.batchIngredient.findUnique({
+      where: { id: bag.batchIngredientId },
+    });
+
+    return await this.prisma.$transaction(async (tx) => {
+      await tx.executionScan.create({
+        data: {
+          qrId: dto.qrId,
+          batchId,
+          productExecutionId: bag.productExecutionId,
+          batchStepId: bag.batchStepId,
+          batchIngredientId: bag.batchIngredientId,
+          sequenceInStep: bi?.sequenceInStep ?? 0,
+        },
+      });
+
+      await tx.weighedBag.update({
+        where: { id: bag.id },
+        data: { status: 'SCANNED', scannedForVerification: new Date() },
+      });
+
+      const updatedStep = await tx.stepExecution.update({
+        where: { id: stepExecution.id },
+        data: { ingredientsAdded: { increment: 1 } },
+      });
+
+      // NOTE: updatedStep.ingredientsAdded already has incremented value
+      const fullyLoaded =
+        updatedStep.ingredientsAdded >= updatedStep.ingredientsExpected;
+
+      return {
+        ok: true,
+        fullyLoaded,
+        ingredientsAdded: updatedStep.ingredientsAdded,
+        ingredientsExpected: updatedStep.ingredientsExpected,
+      };
+    });
+  }
+
+  async completeExecutionStep(batchId: number, dto: CompleteStepDto) {
+    const product = await this.prisma.productExecution.findFirst({
+      where: { id: dto.productExecutionId, batchId },
+    });
+
+    if (!product) {
+      throw new BadRequestException(
+        'ProductExecution does not belong to this batch'
+      );
+    }
+
+    const stepExecution = await this.prisma.stepExecution.findFirst({
+      where: {
+        productExecutionId: product.id,
+        batchStepId: dto.batchStepId,
+      },
+      include: { batchStep: true },
+    });
+
+    if (!stepExecution) {
+      throw new BadRequestException(
+        'StepExecution not found for this product/step'
+      );
+    }
+
+    // Allow idempotent
+    if (stepExecution.status === 'DONE') {
+      return {
+        ok: true,
+        productExecutionId: product.id,
+        allStepsDoneForProduct: false,
+        nextStepExecutionId: null,
+      };
+    }
+
+    if (stepExecution.status !== 'IN_PROGRESS') {
+      throw new BadRequestException('Step is not in progress');
+    }
+
+    if (stepExecution.ingredientsAdded < stepExecution.ingredientsExpected) {
+      throw new BadRequestException(
+        'Not all ingredients scanned for this step / product'
+      );
+    }
+
+    return await this.prisma.$transaction(async (tx) => {
+      const doneStep = await tx.stepExecution.update({
+        where: { id: stepExecution.id },
+        data: {
+          status: 'DONE',
+          completedAt: new Date(),
+        },
+        include: { batchStep: true },
+      });
+
+      // Fetch all steps for this product (current DB snapshot)
+      const allStepsRaw = await this.getOrderedStepExecutionsForProduct(
+        product.id
+      );
+
+      // Sort by: KNEADER steps first, then MIXING,
+      // and inside each type by sequenceNumber
+      const sortedSteps = [...allStepsRaw].sort((a, b) => {
+        const priority = (s: any) =>
+          s.batchStep.stepType === 'KNEADER' ? 1 : 2;
+
+        const pa = priority(a);
+        const pb = priority(b);
+
+        if (pa !== pb) return pa - pb;
+        return a.batchStep.sequenceNumber - b.batchStep.sequenceNumber;
+      });
+
+      // Find index of the step we just finished
+      const currentIndex = sortedSteps.findIndex((s) => s.id === doneStep.id);
+
+      // Pick the next step in that global order
+      const next =
+        currentIndex >= 0 && currentIndex < sortedSteps.length - 1
+          ? sortedSteps[currentIndex + 1]
+          : null;
+
+      // Mark next step READY (if it exists and isn't already DONE)
+      if (next && next.status === 'PENDING') {
+        await tx.stepExecution.update({
+          where: { id: next.id },
+          data: {
+            status: 'READY',
+            startedAt: null,
+          },
+        });
+      }
+
+      // Product is complete ONLY when all steps are DONE
+      const allDone = sortedSteps.every((s) => s.status === 'DONE');
+
+      if (allDone) {
+        await tx.productExecution.update({
+          where: { id: product.id },
+          data: {
+            status: 'STEP_COMPLETED',
+            executionCompletedAt: new Date(),
+          },
+        });
+      }
+
+      return {
+        ok: true,
+        productExecutionId: product.id,
+        allStepsDoneForProduct: allDone,
+        nextStepExecutionId: next?.id ?? null,
+      };
+    });
+  }
+
+  async finalizeProductExecution(batchId: number, dto: FinalizeProductDto) {
+    const product = (await this.prisma.productExecution.findFirst({
+      where: { id: dto.productExecutionId, batchId },
+      include: { stepExecutions: true },
+    })) as ProductWithSteps;
+
+    if (!product) {
+      throw new BadRequestException(
+        'ProductExecution does not belong to this batch'
+      );
+    }
+
+    const allStepsDone = (product.stepExecutions as any[]).every(
+      (s) => s.status === 'DONE'
+    );
+
+    if (!allStepsDone) {
+      throw new BadRequestException(
+        'All steps must be DONE before finalizing product'
+      );
+    }
+
+    const existingFinal = await this.prisma.finalProduct.findFirst({
+      where: {
+        batchId,
+        productExecutionId: product.id,
+      },
+    });
+
+    if (existingFinal) {
+      return {
+        ok: true,
+        finalProductId: existingFinal.id,
+        qrId: existingFinal.qrId,
+        alreadyExists: true,
+      };
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const qrId = `FP-B${batchId}-P${product.productSequence}-${Date.now()}`;
+
+      const final = await tx.finalProduct.create({
+        data: {
+          batchId,
+          productExecutionId: product.id,
+          productSequence: product.productSequence,
+          qrId,
+        },
+      });
+
+      await tx.productExecution.update({
+        where: { id: product.id },
+        data: {
+          status: 'PRODUCT_COMPLETED',
+        },
+      });
+
+      // If all products completed -> mark batch COMPLETED
+      const allProducts = await tx.productExecution.findMany({
+        where: { batchId },
+      });
+
+      const allCompleted = allProducts.every(
+        (p) => p.status === 'PRODUCT_COMPLETED'
+      );
+
+      if (allCompleted) {
+        await tx.batch.update({
+          where: { id: batchId },
+          data: { status: 'COMPLETED' },
+        });
+      }
+
+      return { final, allCompleted };
+    });
+
+    return {
+      ok: true,
+      finalProductId: result.final.id,
+      qrId: result.final.qrId,
+      batchId,
+      productExecutionId: product.id,
+      productSequence: product.productSequence,
+      batchCompleted: result.allCompleted,
+      createdAt: result.final.createdAt,
+    };
+  }
+
+  async getFinalizedProductQr(batchId: number, productExecutionId: number) {
+    const final = await this.prisma.finalProduct.findFirst({
+      where: { batchId, productExecutionId },
+    });
+
+    if (!final) {
+      throw new BadRequestException('QR not generated yet for this product');
+    }
+
+    const product = await this.prisma.productExecution.findUnique({
+      where: { id: productExecutionId },
+    });
+
+    return {
+      qrId: final.qrId,
+      batchId,
+      productExecutionId,
+      productSequence: product?.productSequence,
+      createdAt: final.createdAt,
+    };
+  }
+
+  async getExecutionStatus(batchId: number) {
+    const batch = await this.prisma.batch.findUnique({
+      where: { id: batchId },
+      include: {
+        productExecutions: {
+          orderBy: { productSequence: 'asc' },
+          include: {
+            stepExecutions: {
+              include: { batchStep: true },
+              orderBy: {
+                batchStep: { sequenceNumber: 'asc' },
+              } as any,
+            },
+          },
+        },
+      } as any,
+    });
+
+    if (!batch) {
+      throw new NotFoundException('Batch not found');
+    }
+
+    return {
+      batchId: batch.id,
+      status: batch.status,
+      products: (batch.productExecutions as any[]).map((p) => ({
+        productExecutionId: p.id,
+        productSequence: p.productSequence,
+        status: p.status,
+        weighingStartedAt: p.weighingStartedAt,
+        weighingCompletedAt: p.weighingCompletedAt,
+        executionStartedAt: p.executionStartedAt,
+        executionCompletedAt: p.executionCompletedAt,
+        steps: (p.stepExecutions as any[]).map((s) => ({
+          stepExecutionId: s.id,
+          batchStepId: s.batchStepId,
+          stepType: s.batchStep.stepType,
+          sequenceNumber: s.batchStep.sequenceNumber,
+          status: s.status,
+          ingredientsAdded: s.ingredientsAdded,
+          ingredientsExpected: s.ingredientsExpected,
+        })),
+      })),
+    };
+  }
+
+  async getActiveExecutionStep(batchId: number, productExecutionId: number) {
+    const product = await this.prisma.productExecution.findFirst({
+      where: { id: productExecutionId, batchId },
+      include: {
+        stepExecutions: {
+          include: { batchStep: true },
+          orderBy: { batchStep: { sequenceNumber: 'asc' } },
+        },
+      },
+    });
+
+    if (!product) {
+      throw new BadRequestException(
+        'ProductExecution does not belong to this batch'
+      );
+    }
+
+    // 1️⃣ Priority: return IN_PROGRESS
+    let step = product.stepExecutions.find((s) => s.status === 'IN_PROGRESS');
+
+    // 2️⃣ Next priority: return READY
+    if (!step) {
+      step = product.stepExecutions.find((s) => s.status === 'READY');
+    }
+
+    // 3️⃣ Fallback: return FIRST step that is NOT DONE
+    if (!step) {
+      step = product.stepExecutions.find((s) => s.status !== 'DONE');
+    }
+
+    if (!step) {
+      throw new BadRequestException('All steps completed for this product');
+    }
+
+    const batchStep = await this.prisma.batchStep.findUnique({
+      where: { id: step.batchStepId },
+      include: {
+        ingredients: {
+          include: { ingredient: true },
+          orderBy: { sequenceInStep: 'asc' },
+        },
+      },
+    });
+
+    const scans = await this.prisma.executionScan.findMany({
+      where: {
+        batchId,
+        productExecutionId,
+        batchStepId: batchStep?.id,
+      },
+      include: {
+        batchIngredient: { include: { ingredient: true } },
+      },
+      orderBy: { sequenceInStep: 'asc' },
+    });
+
+    let remainingSeconds = null;
+
+    if (step.status === 'IN_PROGRESS' && step.startedAt) {
+      const now = new Date();
+      const elapsed = Math.floor(
+        (now.getTime() - step.startedAt.getTime()) / 1000
+      );
+      const timerSeconds = batchStep?.timerSeconds ?? 0;
+      remainingSeconds = Math.max(timerSeconds - elapsed, 0);
+    }
+
+    return {
+      productExecutionId: product.id,
+      productSequence: product.productSequence,
+      stepExecutionId: step.id,
+      batchStepId: batchStep?.id,
+      stepType: batchStep?.stepType,
+      sequenceNumber: batchStep?.sequenceNumber,
+      stepStatus: step.status,
+      timerSeconds: batchStep?.timerSeconds,
+      remainingSeconds,
+      pressure: batchStep?.pressure,
+      temperature: batchStep?.temperature,
+      rpm: batchStep?.rpm,
+      expectedIngredients: batchStep?.ingredients.map((bi) => {
+        const scanned = scans.some((s) => s.batchIngredientId === bi.id);
+        return {
+          batchIngredientId: bi.id,
+          stepNumber: batchStep.sequenceNumber,
+          stepType: batchStep.stepType,
+          ingredientCode: bi.ingredient.ingredientCode,
+          ingredientName: bi.ingredient.name,
+          quantityPerUnit: bi.quantityPerUnit,
+          unit: bi.unit,
+          scanned,
+        };
+      }),
+      executedIngredients: scans.map((s) => ({
+        qrId: s.qrId,
+        ingredientCode: s.batchIngredient.ingredient.ingredientCode,
+        ingredientName: s.batchIngredient.ingredient.name,
+      })),
+    };
+  }
+
+  async finalizeBatch(batchId: number) {
+    const batch = await this.prisma.batch.findUnique({
+      where: { id: batchId },
+      include: { productExecutions: true },
+    });
+
+    if (!batch) {
+      throw new BadRequestException('Batch not found');
+    }
+
+    const allProductsDone = batch.productExecutions.every(
+      (p) => p.status === 'PRODUCT_COMPLETED'
+    );
+
+    if (!allProductsDone) {
+      throw new BadRequestException(
+        'All products must be PRODUCT_COMPLETED before generating Batch QR'
+      );
+    }
+
+    const existing = await this.prisma.finalBatch.findFirst({
+      where: { batchId },
+    });
+
+    if (existing) {
+      return {
+        ok: true,
+        alreadyExists: true,
+        qrId: existing.qrId,
+        finalBatchId: existing.id,
+        createdAt: existing.createdAt,
+      };
+    }
+
+    const qrId = `FB-${batchId}-${Date.now()}`;
+
+    const created = await this.prisma.finalBatch.create({
+      data: {
+        batchId,
+        qrId,
+      },
+    });
+
+    await this.prisma.batch.update({
+      where: { id: batchId },
+      data: { status: 'COMPLETED' },
+    });
+
+    return {
+      ok: true,
+      qrId: created.qrId,
+      finalBatchId: created.id,
+      createdAt: created.createdAt,
+    };
+  }
+
+  async getBatchQr(batchId: number) {
+    const final = await this.prisma.finalBatch.findUnique({
+      where: { batchId },
+    });
+
+    if (!final) {
+      throw new BadRequestException('Batch QR not generated yet');
+    }
+
+    return {
+      qrId: final.qrId,
+      batchId,
+      createdAt: final.createdAt,
+    };
   }
 }
