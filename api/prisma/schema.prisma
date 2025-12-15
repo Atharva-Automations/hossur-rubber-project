@@ -107,8 +107,6 @@ model InwardQrCode {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
-  weighedBags WeighedBag[]
-
   // Optional: quick lookup index (not required—tag already unique)
   // @@index([tag])
 }
@@ -340,8 +338,12 @@ model WeighedBag {
   productExecution ProductExecution @relation(fields: [productExecutionId], references: [id], onDelete: Cascade)
   batchStep        BatchStep        @relation(fields: [batchStepId], references: [id], onDelete: Cascade)
   batchIngredient  BatchIngredient  @relation(fields: [batchIngredientId], references: [id], onDelete: Cascade)
-  InwardQrCode     InwardQrCode?    @relation(fields: [inwardQrCodeId], references: [id])
-  inwardQrCodeId   Int?
+
+  @@index([batchId])
+  @@index([productExecutionId])
+  @@index([batchStepId])
+  @@index([batchIngredientId])
+}
 
   @@index([batchId])
   @@index([productExecutionId])

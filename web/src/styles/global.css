@@ -1,15 +1,30 @@
+@import './theme.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Global overrides */
 body {
-  @apply bg-gray-50 text-gray-900;
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  line-height: 1.6;
 }
 
-/* Fix transparent modal backgrounds */
-[data-state='open'] > div[data-portal] > div {
-  background-color: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(6px);
-  border-radius: 8px;
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gray-400);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-500);
 }

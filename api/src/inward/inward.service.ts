@@ -39,23 +39,32 @@ export class InwardService {
     const list: { bagNo: number; label: string; qrId: string }[] = [];
 
     if (inward.storedAsWhole) {
+      const formattedQrId = `MT-${String(inward.id).padStart(5, '0')}-FULL`;
+
       list.push({
         bagNo: 1,
         label: `${inward.materialName} - Full Lot`,
-        qrId: `QR-${inward.id}-1`,
+        qrId: formattedQrId,
       });
+
       return list;
     }
 
     const bagW = inward.bagWeight ?? 1;
     const totalBags = Math.max(1, Math.ceil(inward.quantity / bagW));
+
     for (let i = 1; i <= totalBags; i++) {
+      const formattedQrId = `INW-${String(inward.id).padStart(5, '0')}-${String(
+        i
+      ).padStart(4, '0')}`;
+
       list.push({
         bagNo: i,
         label: `${inward.materialName} - Bag ${i}`,
-        qrId: `QR-${inward.id}-${i}`,
+        qrId: formattedQrId,
       });
     }
+
     return list;
   }
 
@@ -219,6 +228,7 @@ export class InwardService {
           materialName: dto.materialName?.trim() ?? existing.materialName,
           supplierName: dto.supplierName?.trim() ?? existing.supplierName,
           quantity: dto.quantity ?? existing.quantity,
+          unit: dto.unit ?? existing.unit,
           bagWeight: newBagWeight,
           storedAsWhole: newStoredAsWhole,
           mfgDate: mfg,
