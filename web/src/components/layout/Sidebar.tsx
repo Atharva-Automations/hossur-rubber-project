@@ -54,7 +54,7 @@ export default function Sidebar() {
                 className={`flex items-center px-3 py-2 rounded-md cursor-pointer transition gap-3 ${
                   isActive
                     ? 'bg-[var(--nav-active)] text-white font-medium'
-                    : 'text-[var(--nav-text)] hover:bg-gray-100'
+                    : 'text-[var(--nav-text)] hover:bg-gray-100 hover:text-black'
                 }`}
               >
                 <Icon size={20} />

@@ -2,7 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { Inward } from '@/types/inward';
 import { useInwardData } from '@/hooks/useInward';
+import { useDeleteInward } from '@/hooks/useInward';
+
+import FilterBar from '@/components/ui/filter-bar';
+import QrPreviewModal from './components/QrPreviewModal';
+import EditInwardDrawer from './components/EditInwardDrawer';
+import InwardDetailsModal from './components/InwardDetailsModal';
+import { StatusBadge } from '@/components/ui/status-badge';
+
 import {
   BarChart,
   Bar,
@@ -13,10 +22,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  // Legend,
   ResponsiveContainer,
+  Legend,
 } from 'recharts';
-
+import { Pencil, Trash2, QrCode } from 'lucide-react';
 import {
   Header,
   PageContainer,
@@ -25,7 +34,6 @@ import {
   Card,
 } from '@/components/global';
 import { KpiCard } from '@/components/ui/kpi-card';
-// import { FilterShell } from '@/components/ui/filter-shell';
 import { DataTableShell } from '@/components/ui/datatable-shell';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,15 +43,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-
-import { Inward } from '@/types/inward';
-import { StatusBadge } from '@/components/ui/status-badge';
-import InwardDetailsModal from './components/InwardDetailsModal';
-import EditInwardDrawer from './components/EditInwardDrawer';
-import { Pencil, Trash2, QrCode } from 'lucide-react';
-import { useDeleteInward } from '@/hooks/useInward';
-import QrPreviewModal from './components/QrPreviewModal';
-import FilterBar from './components/FilterBar';
 
 export default function InwardPage() {
   const { data = [], isLoading } = useInwardData();
@@ -83,72 +82,170 @@ export default function InwardPage() {
     }
 
     // Sort
-    // result.sort((a, b) => {
-    //   const dateA = new Date(a.createdAt).getTime();
-    //   const dateB = new Date(b.createdAt).getTime();
-    //   return filters.sort === 'desc' ? dateB - dateA : dateA - dateB;
-    // });
+    if (filters.sort) {
+      result.sort((a, b) => {
+        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return filters.sort === 'asc' ? ta - tb : tb - ta;
+      });
+    }
 
     return result;
   }, [data, filters]);
 
-  const { stats, supplierChartData, materialChartData } = useMemo(() => {
-    const expired = data.filter((d) => isExpired(d.expDate)).length;
-    const totalQuantity = data.reduce((sum, d) => sum + d.quantity, 0);
+  const { stats, supplierChartData, materialChartData, trends } =
+    useMemo(() => {
+      const now = new Date();
 
-    // Supplier data for bar chart
-    const supplierMap = new Map<string, number>();
-    data.forEach((d) => {
-      const current = supplierMap.get(d.supplierName) || 0;
-      supplierMap.set(d.supplierName, current + d.quantity);
-    });
-    const supplierChartData = Array.from(supplierMap.entries())
-      .map(([name, quantity]) => ({
-        name: name.length > 15 ? name.substring(0, 12) + '...' : name,
-        quantity: Math.round(quantity * 100) / 100,
-      }))
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 8);
+      // -------------------------------
+      // Date ranges
+      // -------------------------------
+      const currentStart = new Date();
+      currentStart.setDate(now.getDate() - 30);
 
-    // Material quantity data for pie chart
-    const materialMap = new Map<string, number>();
-    data.forEach((d) => {
-      const current = materialMap.get(d.materialName) || 0;
-      materialMap.set(d.materialName, current + d.quantity);
-    });
-    const colors = [
-      '#3b82f6',
-      '#06b6d4',
-      '#ec4899',
-      '#a855f7',
-      '#f59e0b',
-      '#10b981',
-      '#ef4444',
-      '#8b5cf6',
-      '#14b8a6',
-      '#f97316',
-      '#6366f1',
-      '#84cc16',
-    ];
-    const materialChartData = Array.from(materialMap.entries())
-      .map(([name, quantity], index) => ({
-        name: name.length > 15 ? name.substring(0, 12) + '...' : name,
-        value: Math.round(quantity * 100) / 100,
-        fill: colors[index % colors.length],
-      }))
-      .sort((a, b) => b.value - a.value);
+      const previousStart = new Date();
+      previousStart.setDate(now.getDate() - 60);
 
-    return {
-      stats: {
-        total: data.length,
-        expired,
-        active: data.length - expired,
-        totalQuantity,
-      },
-      supplierChartData,
-      materialChartData,
-    };
-  }, [data]);
+      // -------------------------------
+      // Helpers
+      // -------------------------------
+      const isExpired = (date: string) => new Date(date) < now;
+
+      const calculateTrend = (current: number, previous: number) => {
+        if (previous === 0) {
+          return { value: 100, positive: true };
+        }
+
+        const diff = ((current - previous) / previous) * 100;
+        return {
+          value: Math.abs(Number(diff.toFixed(1))),
+          positive: diff >= 0,
+        };
+      };
+
+      // -------------------------------
+      // Period-based data
+      // -------------------------------
+      const currentPeriod = data.filter(
+        (d) => d.createdAt && new Date(d.createdAt) >= currentStart
+      );
+
+      const previousPeriod = data.filter(
+        (d) =>
+          d.createdAt &&
+          new Date(d.createdAt) >= previousStart &&
+          new Date(d.createdAt) < currentStart
+      );
+
+      // -------------------------------
+      // KPI counts
+      // -------------------------------
+      const total = data.length;
+      const expired = data.filter((d) => isExpired(d.expDate)).length;
+      const active = total - expired;
+
+      const totalQuantity = data.reduce((sum, d) => sum + d.quantity, 0);
+
+      // -------------------------------
+      // KPI period metrics
+      // -------------------------------
+      const currentActive = currentPeriod.filter(
+        (d) => !isExpired(d.expDate)
+      ).length;
+
+      const previousActive = previousPeriod.filter(
+        (d) => !isExpired(d.expDate)
+      ).length;
+
+      const currentExpired = currentPeriod.filter((d) =>
+        isExpired(d.expDate)
+      ).length;
+
+      const previousExpired = previousPeriod.filter((d) =>
+        isExpired(d.expDate)
+      ).length;
+
+      const currentTotalQty = currentPeriod.reduce(
+        (sum, d) => sum + d.quantity,
+        0
+      );
+
+      const previousTotalQty = previousPeriod.reduce(
+        (sum, d) => sum + d.quantity,
+        0
+      );
+
+      // -------------------------------
+      // Supplier bar chart
+      // -------------------------------
+      const supplierMap = new Map<string, number>();
+      data.forEach((d) => {
+        supplierMap.set(
+          d.supplierName,
+          (supplierMap.get(d.supplierName) || 0) + d.quantity
+        );
+      });
+
+      const supplierChartData = Array.from(supplierMap.entries())
+        .map(([name, quantity]) => ({
+          name: name.length > 15 ? name.slice(0, 12) + '...' : name,
+          quantity: Math.round(quantity * 100) / 100,
+        }))
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 8);
+
+      // -------------------------------
+      // Material pie chart
+      // -------------------------------
+      const stringToColor = (str: string) => {
+        let hash = 0;
+
+        for (let i = 0; i < str.length; i++) {
+          hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        }
+
+        const hue = Math.abs(hash) % 360;
+
+        // HSL gives much better visual distribution than RGB
+        return `hsl(${hue}, 70%, 50%)`;
+      };
+
+      const materialMap = new Map<string, number>();
+      data.forEach((d) => {
+        materialMap.set(
+          d.materialName,
+          (materialMap.get(d.materialName) || 0) + d.quantity
+        );
+      });
+
+      const materialChartData = Array.from(materialMap.entries())
+        .map(([name, quantity]) => ({
+          name,
+          value: Math.round(quantity * 100) / 100,
+          fill: stringToColor(name),
+        }))
+        .sort((a, b) => b.value - a.value);
+
+      // -------------------------------
+      // Return
+      // -------------------------------
+      return {
+        stats: {
+          total,
+          active,
+          expired,
+          totalQuantity,
+        },
+        trends: {
+          total: calculateTrend(currentPeriod.length, previousPeriod.length),
+          active: calculateTrend(currentActive, previousActive),
+          expired: calculateTrend(currentExpired, previousExpired),
+          quantity: calculateTrend(currentTotalQty, previousTotalQty),
+        },
+        supplierChartData,
+        materialChartData,
+      };
+    }, [data]);
 
   return (
     <PageContainer>
@@ -166,28 +263,31 @@ export default function InwardPage() {
           value={stats.total}
           gradient="blue"
           icon="📊"
-          trend={{ value: 12, positive: true }}
+          trend={trends.total}
         />
+
         <KpiCard
           title="Active Items"
           value={stats.active}
           gradient="cyan"
           icon="✓"
-          trend={{ value: 8, positive: true }}
+          trend={trends.active}
         />
+
         <KpiCard
           title="Expired"
           value={stats.expired}
           gradient="pink"
           icon="⚠️"
-          trend={{ value: 3, positive: false }}
+          trend={trends.expired}
         />
+
         <KpiCard
           title="Total Quantity"
           value={`${stats.totalQuantity.toFixed(1)}kg`}
           gradient="purple"
           icon="⚖️"
-          trend={{ value: 25, positive: true }}
+          trend={trends.quantity}
         />
       </StatsGrid>
 
@@ -272,17 +372,24 @@ export default function InwardPage() {
                     data={materialChartData}
                     cx="50%"
                     cy="50%"
-                    labelLine={false}
-                    label={({ name, value }) => `${name}: ${value}kg`}
                     outerRadius={100}
-                    fill="#8884d8"
                     dataKey="value"
                   >
                     {materialChartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
                     ))}
                   </Pie>
+
                   <Tooltip formatter={(value) => `${value} kg`} />
+
+                  <Legend
+                    layout="vertical"
+                    align="right"
+                    verticalAlign="middle"
+                    formatter={(value, entry: any) =>
+                      `${value} (${entry.payload.value}kg)`
+                    }
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -296,13 +403,23 @@ export default function InwardPage() {
 
       {/* Filter & Table Section */}
       <Section
-        title="Materials List"
+        title="Materials Entry List"
         description="View and manage all incoming materials"
         className="mt-8"
       >
         <Card noPadding>
           <div className="p-6 border-b border-gray-200">
-            <FilterBar filters={filters} setFilters={setFilters} />
+            <FilterBar
+              filters={filters}
+              setFilters={(updater) => {
+                const updated = updater(filters);
+                setFilters({
+                  search: updated.search ?? '',
+                  status: updated.status ?? 'All',
+                  sort: updated.sort ?? 'desc',
+                });
+              }}
+            />
           </div>
 
           <div className="overflow-x-auto">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useMaterials, useSuppliers } from '@/hooks/useLookup';
@@ -13,9 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-// import { toast } from '@/components/ui/use-toast';
 import { Header, PageContainer, Card } from '@/components/global';
-import { Plus } from 'lucide-react';
 
 import {
   Select,
@@ -44,19 +42,47 @@ export default function AddInwardPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [savedInwardId, setSavedInwardId] = useState<number | null>(null);
-  const [openNewMaterial, setOpenNewMaterial] = useState(false);
-  const [openNewSupplier, setOpenNewSupplier] = useState(false);
-  const [newMaterialName, setNewMaterialName] = useState('');
-  const [newSupplierName, setNewSupplierName] = useState('');
 
   const { mutateAsync: createInward, isPending } = useCreateInward();
 
   const { data: materials = [] } = useMaterials();
   const { data: suppliers = [] } = useSuppliers();
 
-  // Merge API data with locally added items
-  // const allMaterials = [...new Set([...materials, ...addedMaterials])];
-  // const allSuppliers = [...new Set([...suppliers, ...addedSuppliers])];
+  const materialWrapperRef = useRef<HTMLDivElement>(null);
+  const supplierWrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        materialWrapperRef.current &&
+        !materialWrapperRef.current.contains(event.target as Node)
+      ) {
+        setShowMaterialList(false);
+        setActiveMaterialIndex(-1);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        supplierWrapperRef.current &&
+        !supplierWrapperRef.current.contains(event.target as Node)
+      ) {
+        setShowSupplierList(false);
+        setActiveSupplierIndex(-1);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // --------------------------------------------------
   // Form State
@@ -118,24 +144,6 @@ export default function AddInwardPage() {
     setErrors((prev) => ({ ...prev, [key]: undefined }));
   };
 
-  const handleAddMaterial = () => {
-    if (newMaterialName.trim()) {
-      const trimmedName = newMaterialName.trim();
-      handleChange('materialName', trimmedName);
-      setNewMaterialName('');
-      setOpenNewMaterial(false);
-    }
-  };
-
-  const handleAddSupplier = () => {
-    if (newSupplierName.trim()) {
-      const trimmedName = newSupplierName.trim();
-      handleChange('supplierName', trimmedName);
-      setNewSupplierName('');
-      setOpenNewSupplier(false);
-    }
-  };
-
   const totalBags = formData.storedAsWhole
     ? 1
     : formData.quantity && formData.bagWeight
@@ -160,6 +168,20 @@ export default function AddInwardPage() {
     }
   };
 
+  const [showMaterialList, setShowMaterialList] = useState(false);
+  const [activeMaterialIndex, setActiveMaterialIndex] = useState(-1);
+
+  const filteredMaterials = materials.filter((m) =>
+    m.toLowerCase().includes(formData.materialName.toLowerCase())
+  );
+
+  const [showSupplierList, setShowSupplierList] = useState(false);
+  const [activeSupplierIndex, setActiveSupplierIndex] = useState(-1);
+
+  const filteredSuppliers = suppliers.filter((s) =>
+    s.toLowerCase().includes(formData.supplierName.toLowerCase())
+  );
+
   return (
     <PageContainer>
       <Header
@@ -174,90 +196,175 @@ export default function AddInwardPage() {
           <Card>
             <div className="space-y-6">
               {/* Material Name */}
-              <div>
+              <div ref={materialWrapperRef} className="relative">
                 <Label>
                   Material Name <span className="text-red-500">*</span>
                 </Label>
-                <Select
+
+                <Input
                   value={formData.materialName}
-                  onValueChange={(v) => {
-                    if (v === '__ADD_NEW__') {
-                      setOpenNewMaterial(true);
-                    } else {
-                      handleChange('materialName', v);
+                  placeholder="Type material name..."
+                  autoComplete="off"
+                  onChange={(e) => {
+                    handleChange('materialName', e.target.value);
+                    setShowMaterialList(true);
+                    setActiveMaterialIndex(-1);
+                  }}
+                  onFocus={() => {
+                    if (formData.materialName) setShowMaterialList(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!showMaterialList || filteredMaterials.length === 0)
+                      return;
+
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setActiveMaterialIndex((prev) =>
+                        prev < filteredMaterials.length - 1 ? prev + 1 : prev
+                      );
+                    }
+
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setActiveMaterialIndex((prev) =>
+                        prev > 0 ? prev - 1 : 0
+                      );
+                    }
+
+                    if (e.key === 'Enter' && activeMaterialIndex >= 0) {
+                      e.preventDefault();
+                      handleChange(
+                        'materialName',
+                        filteredMaterials[activeMaterialIndex]
+                      );
+                      setShowMaterialList(false);
+                      setActiveMaterialIndex(-1);
+                    }
+
+                    if (e.key === 'Escape') {
+                      setShowMaterialList(false);
+                      setActiveMaterialIndex(-1);
                     }
                   }}
-                >
-                  <SelectTrigger
-                    className={`bg-white mt-1 ${
-                      errors.materialName ? 'border-red-500' : ''
-                    }`}
-                  >
-                    <SelectValue placeholder="Select material" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border border-gray-200">
-                    {materials.map((m) => (
-                      <SelectItem key={m} value={m}>
+                  className={`mt-1 ${
+                    errors.materialName ? 'border-red-500' : ''
+                  }`}
+                />
+
+                {/* Suggestions */}
+                {showMaterialList && filteredMaterials.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-sm max-h-40 overflow-y-auto">
+                    {filteredMaterials.slice(0, 8).map((m, index) => (
+                      <div
+                        key={m}
+                        className={`px-3 py-2 text-sm cursor-pointer ${
+                          index === activeMaterialIndex
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onMouseDown={() => {
+                          handleChange('materialName', m);
+                          setShowMaterialList(false);
+                          setActiveMaterialIndex(-1);
+                        }}
+                      >
                         {m}
-                      </SelectItem>
-                    ))}
-                    <SelectItem
-                      value="__ADD_NEW__"
-                      className="text-blue-600 font-medium"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Plus size={16} />
-                        Add New Material
                       </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                    ))}
+                  </div>
+                )}
+
                 {errors.materialName && (
-                  <p className="text-red-600 text-xs">{errors.materialName}</p>
+                  <p className="text-red-600 text-xs mt-1">
+                    {errors.materialName}
+                  </p>
                 )}
               </div>
 
               {/* Supplier */}
-              <div>
+              <div ref={supplierWrapperRef} className="relative">
                 <Label>
-                  Supplier <span className="text-red-500">*</span>
+                  Supplier Name <span className="text-red-500">*</span>
                 </Label>
-                <Select
+
+                <Input
                   value={formData.supplierName}
-                  onValueChange={(v) => {
-                    if (v === '__ADD_NEW__') {
-                      setOpenNewSupplier(true);
-                    } else {
-                      handleChange('supplierName', v);
+                  placeholder="Type supplier name..."
+                  autoComplete="off"
+                  onChange={(e) => {
+                    handleChange('supplierName', e.target.value);
+                    setShowSupplierList(true);
+                    setActiveSupplierIndex(-1);
+                  }}
+                  onFocus={() => {
+                    if (formData.supplierName) setShowSupplierList(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (!showSupplierList || filteredSuppliers.length === 0)
+                      return;
+
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setActiveSupplierIndex((prev) =>
+                        prev < filteredSuppliers.length - 1 ? prev + 1 : prev
+                      );
+                    }
+
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setActiveSupplierIndex((prev) =>
+                        prev > 0 ? prev - 1 : 0
+                      );
+                    }
+
+                    if (e.key === 'Enter' && activeSupplierIndex >= 0) {
+                      e.preventDefault();
+                      handleChange(
+                        'supplierName',
+                        filteredSuppliers[activeSupplierIndex]
+                      );
+                      setShowSupplierList(false);
+                      setActiveSupplierIndex(-1);
+                    }
+
+                    if (e.key === 'Escape') {
+                      setShowSupplierList(false);
+                      setActiveSupplierIndex(-1);
                     }
                   }}
-                >
-                  <SelectTrigger
-                    className={`bg-white mt-1 ${
-                      errors.supplierName ? 'border-red-500' : ''
-                    }`}
-                  >
-                    <SelectValue placeholder="Select supplier" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border border-gray-200">
-                    {suppliers.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                    <SelectItem
-                      value="__ADD_NEW__"
-                      className="text-blue-600 font-medium"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Plus size={16} />
-                        Add New Supplier
+                  className={`mt-1 ${
+                    errors.supplierName ? 'border-red-500' : ''
+                  }`}
+                />
+
+                {/* Suggestions */}
+                {showSupplierList && filteredSuppliers.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-sm max-h-40 overflow-y-auto">
+                    {filteredSuppliers.slice(0, 8).map((m, index) => (
+                      <div
+                        key={m}
+                        className={`px-3 py-2 text-sm cursor-pointer ${
+                          index === activeSupplierIndex
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'hover:bg-gray-100'
+                        }`}
+                        onMouseDown={() => {
+                          // onMouseDown instead of onClick prevents blur issue
+                          handleChange('supplierName', m);
+                          setShowSupplierList(false);
+                          setActiveSupplierIndex(-1);
+                        }}
+                      >
+                        {m}
                       </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                    ))}
+                  </div>
+                )}
+
                 {errors.supplierName && (
-                  <p className="text-red-600 text-xs">{errors.supplierName}</p>
+                  <p className="text-red-600 text-xs mt-1">
+                    {errors.supplierName}
+                  </p>
                 )}
               </div>
 
@@ -526,100 +633,6 @@ export default function AddInwardPage() {
           inwardId={savedInwardId}
         />
       )}
-
-      {/* Add New Material Modal */}
-      <Dialog open={openNewMaterial} onOpenChange={setOpenNewMaterial}>
-        <DialogContent className="sm:max-w-md bg-white">
-          <DialogHeader>
-            <DialogTitle className="text-gray-900">
-              Add New Material
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label className="text-gray-700 font-medium">Material Name</Label>
-              <Input
-                type="text"
-                placeholder="Enter material name"
-                value={newMaterialName}
-                onChange={(e) => setNewMaterialName(e.target.value)}
-                className="mt-2 bg-white border-gray-200 text-gray-900"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddMaterial();
-                  }
-                }}
-              />
-            </div>
-          </div>
-          <DialogFooter className="flex justify-end gap-3 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setNewMaterialName('');
-                setOpenNewMaterial(false);
-              }}
-              className="border-gray-300 text-gray-700 hover:bg-gray-50"
-            >
-              Cancel
-            </Button>
-            <Button
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-              onClick={handleAddMaterial}
-              disabled={!newMaterialName.trim()}
-            >
-              Add Material
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add New Supplier Modal */}
-      <Dialog open={openNewSupplier} onOpenChange={setOpenNewSupplier}>
-        <DialogContent className="sm:max-w-md bg-white">
-          <DialogHeader>
-            <DialogTitle className="text-gray-900">
-              Add New Supplier
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label className="text-gray-700 font-medium">Supplier Name</Label>
-              <Input
-                type="text"
-                placeholder="Enter supplier name"
-                value={newSupplierName}
-                onChange={(e) => setNewSupplierName(e.target.value)}
-                className="mt-2 bg-white border-gray-200 text-gray-900"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddSupplier();
-                  }
-                }}
-              />
-            </div>
-          </div>
-          <DialogFooter className="flex justify-end gap-3 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setNewSupplierName('');
-                setOpenNewSupplier(false);
-              }}
-              className="border-gray-300 text-gray-700 hover:bg-gray-50"
-            >
-              Cancel
-            </Button>
-            <Button
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-              onClick={handleAddSupplier}
-              disabled={!newSupplierName.trim()}
-            >
-              Add Supplier
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </PageContainer>
   );
 }

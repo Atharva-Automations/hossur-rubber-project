@@ -1,7 +1,7 @@
 'use client';
 import { Header, PageContainer } from '@/components/global';
 import { Button } from '@/components/ui/button';
-import FilterBar from './components/FilterBar';
+import FilterBar from '@/components/ui/filter-bar';
 import BinTable from './components/BinTable';
 import Link from 'next/link';
 

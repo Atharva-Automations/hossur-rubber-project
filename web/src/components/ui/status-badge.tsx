@@ -10,8 +10,8 @@ export function StatusBadge({ status }: StatusBadgeProps) {
       className={cn(
         'px-2 py-0.5 rounded-full text-xs font-medium',
         status === 'Active'
-          ? 'bg-green-900/30 text-green-400'
-          : 'bg-red-900/30 text-red-400'
+          ? 'bg-green-100 text-green-700'
+          : 'bg-red-100 text-red-700'
       )}
     >
       {status}

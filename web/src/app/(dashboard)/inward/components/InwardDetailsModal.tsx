@@ -22,7 +22,6 @@ export default function InwardDetailsModal({
   open,
   onClose,
   item,
-  onEdit,
 }: InwardDetailsModalProps) {
   if (!item) return null;
 
@@ -96,15 +95,6 @@ export default function InwardDetailsModal({
             className="border-gray-300 text-gray-700 hover:bg-gray-50"
           >
             Close
-          </Button>
-          <Button
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-            onClick={() => {
-              onClose();
-              onEdit();
-            }}
-          >
-            Edit
           </Button>
         </DialogFooter>
       </DialogContent>

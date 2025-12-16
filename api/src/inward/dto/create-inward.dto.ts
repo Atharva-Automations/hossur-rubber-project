@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsEnum,
   IsPositive,
+  IsNotEmpty,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
@@ -15,10 +16,14 @@ export enum UnitType {
 }
 
 export class CreateInwardDto {
+  @Transform(({ value }) => value?.trim())
   @IsString()
+  @IsNotEmpty()
   materialName!: string;
 
+  @Transform(({ value }) => value?.trim())
   @IsString()
+  @IsNotEmpty()
   supplierName!: string;
 
   @IsEnum(UnitType)
