@@ -2,8 +2,8 @@ import {
   IsString,
   IsNumber,
   IsOptional,
-  IsArray,
   IsNotEmpty,
+  IsPositive,
 } from 'class-validator';
 
 export class CreateOutwardDto {
@@ -12,30 +12,26 @@ export class CreateOutwardDto {
   materialName!: string;
 
   @IsNumber()
-  @IsNotEmpty()
+  @IsPositive()
   quantity!: number;
 
-  @IsString()
   @IsOptional()
-  unit?: string = 'KG';
+  @IsString()
+  unit?: string;
 
   @IsString()
   @IsNotEmpty()
   issuedTo!: string;
 
-  @IsString()
   @IsOptional()
-  purpose?: string = 'Production';
+  @IsString()
+  purpose?: string;
 
-  @IsString()
   @IsOptional()
+  @IsString()
   remarks?: string;
 
-  @IsArray()
-  @IsNotEmpty()
-  selectedQrIds!: string[];
-
-  @IsString()
   @IsOptional()
-  status?: string = 'Pending';
+  @IsString()
+  status?: string;
 }

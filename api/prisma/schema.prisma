@@ -345,12 +345,6 @@ model WeighedBag {
   @@index([batchIngredientId])
 }
 
-  @@index([batchId])
-  @@index([productExecutionId])
-  @@index([batchStepId])
-  @@index([batchIngredientId])
-}
-
 // ─────────────────────────────────────────────
 // BulkWeighingSeed - this stores the bulk qrs generated before weighing
 // ─────────────────────────────────────────────

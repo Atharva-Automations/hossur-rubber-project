@@ -2,6 +2,7 @@
 
 import api from '@/lib/api';
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ export default function ScanQrModal({
   const [scannedCount, setScannedCount] = useState(0);
   const [totalBags, setTotalBags] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const qc = useQueryClient();
 
   const handleScan = async () => {
     if (!qrInput.trim()) {
@@ -50,6 +52,10 @@ export default function ScanQrModal({
 
       setScannedCount(scannedBags);
       setTotalBags(totalBags);
+
+      // Refresh outward data and analytics so UI reflects scanned status
+      qc.invalidateQueries({ queryKey: ['outward'] });
+      qc.invalidateQueries({ queryKey: ['outwardAnalytics'] });
 
       toast({
         title: status === 'Completed' ? 'All Bags Scanned' : 'Bag Scanned',

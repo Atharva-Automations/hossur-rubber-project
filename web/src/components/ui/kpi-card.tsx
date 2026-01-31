@@ -5,7 +5,7 @@ interface KpiCardProps {
   title: string;
   value: string | number;
   icon?: React.ReactNode;
-  gradient?: 'purple' | 'blue' | 'pink' | 'cyan';
+  gradient?: 'purple' | 'blue' | 'pink' | 'cyan' | 'green' | 'red';
   trend?: {
     value: number;
     positive: boolean;
@@ -18,6 +18,8 @@ const gradientClasses = {
   blue: 'from-blue-500 to-blue-700',
   pink: 'from-pink-500 to-pink-700',
   cyan: 'from-cyan-500 to-cyan-700',
+  green: 'from-green-500 to-green-700',
+  red: 'from-red-500 to-red-700',
 };
 
 export function KpiCard({

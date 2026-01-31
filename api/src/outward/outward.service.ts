@@ -5,69 +5,66 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { QrState } from '@prisma/client';
+import { CreateOutwardDto } from './dto/create-outward.dto';
 
 @Injectable()
 export class OutwardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(data: any) {
-    const { materialName, issuedTo, selectedQrIds = [] } = data;
+  async create(dto: CreateOutwardDto) {
+    const materialName = dto.materialName.trim();
+    const issuedTo = dto.issuedTo.trim();
 
-    if (!materialName || !issuedTo || selectedQrIds.length === 0) {
-      throw new BadRequestException(
-        'Material, IssuedTo, and at least one bag (QR) are required.'
-      );
+    if (dto.quantity <= 0) {
+      throw new BadRequestException('Quantity must be greater than zero');
     }
 
-    const qrs = await this.prisma.inwardQrCode.findMany({
-      where: { qrId: { in: selectedQrIds }, state: QrState.CREATED },
-      include: { inward: true },
-    });
-
-    if (qrs.length === 0) {
-      const invalidCount = selectedQrIds.length - qrs.length;
-      throw new BadRequestException(
-        `Selected QR codes are invalid or already issued. ${invalidCount} of ${selectedQrIds.length} failed validation.`
-      );
-    }
-
-    const materialSet = new Set(qrs.map((q) => q.inward.materialName));
-    if (materialSet.size > 1) {
-      throw new BadRequestException(
-        'All selected bags must belong to the same material.'
-      );
-    }
-
-    const totalQty = qrs.reduce((sum, q) => sum + (q.inward.bagWeight || 0), 0);
-    const unit = qrs[0].inward.unit;
-
-    const stock = await this.prisma.materialStock.findUnique({
-      where: { materialName },
-    });
-    if (!stock) throw new BadRequestException('Material not found in stock');
-    if (stock.totalQuantity < totalQty)
-      throw new BadRequestException('Not enough stock available');
-
-    const [_, outward] = await this.prisma.$transaction([
-      this.prisma.materialStock.update({
-        where: { materialName },
-        data: { totalQuantity: { decrement: totalQty } },
-      }),
-      this.prisma.outwardEntry.create({
-        data: {
-          materialName,
-          quantity: totalQty,
-          unit,
-          issuedTo,
-          purpose: data.purpose || 'Production',
-          remarks: data.remarks || '',
-          status: 'Pending',
-          qrScanStatus: { totalBags: qrs.length, scannedBags: 0 },
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Find stock (case-insensitive)
+      const stock = await tx.materialStock.findFirst({
+        where: {
+          materialName: { equals: materialName, mode: 'insensitive' },
         },
-      }),
-    ]);
+      });
 
-    return { outward, totalBags: qrs.length, totalQty };
+      if (!stock) {
+        throw new BadRequestException('Material not found in stock');
+      }
+
+      if (stock.totalQuantity < dto.quantity) {
+        throw new BadRequestException(
+          `Insufficient stock. Available: ${stock.totalQuantity}`
+        );
+      }
+
+      // 2. Decrement stock
+      await tx.materialStock.update({
+        where: { id: stock.id },
+        data: {
+          totalQuantity: { decrement: dto.quantity },
+          updatedAt: new Date(),
+        },
+      });
+
+      // 3. Create outward entry
+      const outward = await tx.outwardEntry.create({
+        data: {
+          materialName: stock.materialName, // canonical name
+          quantity: dto.quantity,
+          unit: stock.unit,
+          issuedTo,
+          purpose: dto.purpose ?? 'Production',
+          remarks: dto.remarks ?? '',
+          status: 'Pending',
+          qrScanStatus: {
+            totalBags: null, // unknown until scans happen
+            scannedBags: 0,
+          },
+        },
+      });
+
+      return outward;
+    });
   }
 
   async findAll() {
@@ -83,54 +80,65 @@ export class OutwardService {
   }
 
   async scanQr(outwardId: number, qrId: string) {
-    const outward = await this.prisma.outwardEntry.findUnique({
-      where: { id: outwardId },
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Fetch outward
+      const outward = await tx.outwardEntry.findUnique({
+        where: { id: outwardId },
+      });
+      if (!outward) {
+        throw new NotFoundException('Outward entry not found');
+      }
+
+      // 2. Fetch QR
+      const qr = await tx.inwardQrCode.findUnique({
+        where: { qrId },
+        include: { inward: true },
+      });
+
+      if (!qr) {
+        throw new BadRequestException('Invalid QR code');
+      }
+
+      if (qr.state !== QrState.CREATED) {
+        throw new BadRequestException('QR already issued or consumed');
+      }
+
+      if (qr.inward.materialName !== outward.materialName) {
+        throw new BadRequestException(
+          `QR belongs to ${qr.inward.materialName}, not ${outward.materialName}`
+        );
+      }
+
+      // 3. Mark QR as issued
+      await tx.inwardQrCode.update({
+        where: { qrId },
+        data: {
+          state: QrState.ISSUED,
+          outwardId,
+          scannedAtOutward: new Date(),
+        },
+      });
+
+      // 4. Update outward scan progress
+      const scannedBags = await tx.inwardQrCode.count({
+        where: { outwardId, state: QrState.ISSUED },
+      });
+
+      await tx.outwardEntry.update({
+        where: { id: outwardId },
+        data: {
+          qrScanStatus: {
+            scannedBags,
+          },
+        },
+      });
+
+      return {
+        message: `QR ${qrId} issued successfully`,
+        scannedBags,
+        status: outward.status,
+      };
     });
-    if (!outward) throw new NotFoundException('Outward entry not found');
-
-    const qr = await this.prisma.inwardQrCode.findUnique({
-      where: { qrId },
-      include: { inward: true },
-    });
-    if (!qr) throw new BadRequestException('Invalid QR code');
-    if (qr.state !== QrState.CREATED)
-      throw new BadRequestException('Bag already issued or consumed');
-
-    if (qr.inward.materialName !== outward.materialName)
-      throw new BadRequestException(
-        `This bag belongs to ${qr.inward.materialName}, not ${outward.materialName}`
-      );
-
-    await this.prisma.inwardQrCode.update({
-      where: { qrId },
-      data: {
-        state: QrState.ISSUED,
-        outwardId,
-        scannedAtOutward: new Date(),
-      },
-    });
-
-    const totalBags = (outward.qrScanStatus as any)?.totalBags || 0;
-    const scannedBags = await this.prisma.inwardQrCode.count({
-      where: { outwardId, state: QrState.ISSUED },
-    });
-
-    const isComplete = totalBags > 0 && scannedBags >= totalBags;
-
-    await this.prisma.outwardEntry.update({
-      where: { id: outwardId },
-      data: {
-        qrScanStatus: { totalBags, scannedBags },
-        ...(isComplete ? { status: 'Completed' } : {}),
-      },
-    });
-
-    return {
-      message: `Bag ${qr.bagNo} scanned successfully.`,
-      scannedBags,
-      totalBags,
-      status: isComplete ? 'Completed' : 'Pending',
-    };
   }
 
   async getAnalytics() {
