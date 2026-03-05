@@ -37,8 +37,9 @@ export default function AssignBinPage() {
   const availableBins = (
     allBins as unknown as Array<{ binNumber?: string; ingredientId?: unknown }>
   )
-    .filter((b) => !b?.ingredientId)
-    .map((b) => b?.binNumber || '');
+    .filter((b) => !b?.ingredientId && b?.binNumber)
+    .map((b) => b?.binNumber || '')
+    .filter((b) => b !== ''); // Filter out empty strings
 
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};

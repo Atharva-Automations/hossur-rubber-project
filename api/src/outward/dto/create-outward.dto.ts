@@ -4,12 +4,18 @@ import {
   IsOptional,
   IsNotEmpty,
   IsPositive,
+  IsArray,
+  IsInt,
 } from 'class-validator';
 
 export class CreateOutwardDto {
+  @IsOptional() // Made optional since we'll use inwardId instead
   @IsString()
-  @IsNotEmpty()
-  materialName!: string;
+  materialName?: string;
+
+  @IsInt()
+  @IsPositive()
+  inwardId!: number;
 
   @IsNumber()
   @IsPositive()
@@ -34,4 +40,9 @@ export class CreateOutwardDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  selectedQrIds?: string[];
 }

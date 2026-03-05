@@ -5,8 +5,28 @@ export function useMaterialStock() {
   return useQuery<MaterialStock[], Error>({
     queryKey: ['materialStock'],
     queryFn: async () => {
+      console.log('Fetching material stock');
       const res = await api.get('/inward/stock');
+      console.log('Material stock response:', res.data);
       return res.data;
+    },
+    onError: (error) => {
+      console.error('Error fetching material stock:', error);
+    },
+  });
+}
+
+export function useAvailableForOutward() {
+  return useQuery<InwardEntryForOutward[], Error>({
+    queryKey: ['availableForOutward'],
+    queryFn: async () => {
+      console.log('Fetching available inward entries for outward');
+      const res = await api.get('/inward/available-for-outward');
+      console.log('Available for outward response:', res.data);
+      return res.data;
+    },
+    onError: (error) => {
+      console.error('Error fetching available inward entries:', error);
     },
   });
 }
@@ -18,4 +38,16 @@ export type MaterialStock = {
   unit: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type InwardEntryForOutward = {
+  id: number;
+  materialName: string;
+  supplierName: string;
+  bagWeight: number | null;
+  unit: string;
+  quantity: number;
+  _count: {
+    qrCodes: number;
+  };
 };

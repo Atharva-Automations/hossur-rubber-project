@@ -427,9 +427,46 @@ export class InwardService {
   }
 
   async getStock() {
-    return this.prisma.materialStock.findMany({
-      orderBy: { materialName: 'asc' },
+    // Get all inward entries and group by material name, supplier, and bag weight
+    const inwardEntries = await this.prisma.inwardEntry.findMany({
+      select: {
+        id: true,
+        materialName: true,
+        supplierName: true,
+        quantity: true,
+        unit: true,
+        bagWeight: true,
+        storedAsWhole: true,
+        status: true,
+        qrCodes: {
+          where: { state: QrState.CREATED },
+          select: { qrId: true },
+        },
+      },
+      orderBy: [
+        { materialName: 'asc' },
+        { bagWeight: 'desc' },
+        { supplierName: 'asc' },
+      ],
     });
+
+    // Transform into stock view grouped by material + supplier + bag size combo
+    return inwardEntries
+      .filter((e) => e.status === 'Active') // Only active materials
+      .map((inward) => ({
+        id: inward.id,
+        materialName: inward.materialName,
+        supplierName: inward.supplierName,
+        bagWeight: inward.bagWeight,
+        unit: inward.unit,
+        storedAsWhole: inward.storedAsWhole,
+        totalQuantity: inward.quantity,
+        totalBags: inward.qrCodes.length,
+        availableBags: inward.qrCodes.length,
+        displayName: inward.storedAsWhole
+          ? `${inward.materialName} - Full Lot (${inward.supplierName})`
+          : `${inward.materialName} - ${inward.bagWeight}${inward.unit}/bag (${inward.supplierName})`,
+      }));
   }
 
   async getAnalytics() {
@@ -520,5 +557,140 @@ export class InwardService {
       },
       orderBy: { bagNo: 'asc' },
     });
+  }
+
+  async getAvailableBagsByInward(inwardId: number) {
+    return this.prisma.inwardQrCode.findMany({
+      where: {
+        inwardId,
+        state: QrState.CREATED,
+      },
+      select: {
+        qrId: true,
+        bagNo: true,
+        inward: {
+          select: {
+            bagWeight: true,
+            unit: true,
+          },
+        },
+      },
+      orderBy: { bagNo: 'asc' },
+    });
+  }
+
+  async getAvailableForOutward() {
+    // Get all inward entries with active status and at least one available QR
+    return this.prisma.inwardEntry.findMany({
+      where: {
+        status: 'Active',
+        qrCodes: {
+          some: {
+            state: QrState.CREATED,
+          },
+        },
+      },
+      select: {
+        id: true,
+        materialName: true,
+        supplierName: true,
+        quantity: true,
+        unit: true,
+        bagWeight: true,
+        storedAsWhole: true,
+        _count: {
+          select: {
+            qrCodes: {
+              where: { state: QrState.CREATED },
+            },
+          },
+        },
+      },
+      orderBy: [
+        { materialName: 'asc' },
+        { bagWeight: 'desc' },
+        { supplierName: 'asc' },
+      ],
+    });
+  }
+
+  async getAvailableBagsByInwardId(inwardId: number) {
+    // Get all CREATED QR codes for a specific inward entry
+    return this.prisma.inwardQrCode.findMany({
+      where: {
+        inwardId,
+        state: QrState.CREATED,
+      },
+      select: {
+        qrId: true,
+        bagNo: true,
+        inward: {
+          select: {
+            bagWeight: true,
+            unit: true,
+          },
+        },
+      },
+      orderBy: { bagNo: 'asc' },
+    });
+  }
+
+  async getQrByQrId(qrId: string) {
+    // Lookup a single QR code by its ID, return state and related inward data
+    console.log('\n========== 📱 SERVICE: getQrByQrId ==========');
+    console.log('🔍 Looking up QR ID:', qrId);
+
+    const qr = await this.prisma.inwardQrCode.findUnique({
+      where: { qrId },
+      include: {
+        inward: {
+          select: {
+            id: true,
+            materialName: true,
+            supplierName: true,
+            bagWeight: true,
+            unit: true,
+            quantity: true,
+            mfgDate: true,
+            expDate: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!qr) {
+      console.error('❌ QR not found in database:', qrId);
+      throw new NotFoundException(`QR code '${qrId}' not found`);
+    }
+
+    console.log('✅ QR found:', {
+      qrId: qr.qrId,
+      state: qr.state,
+      inwardId: qr.inwardId,
+      material: qr.inward.materialName,
+      supplier: qr.inward.supplierName,
+      bagWeight: qr.inward.bagWeight,
+    });
+
+    // Return QR details with state and status information
+    const result = {
+      qrId: qr.qrId,
+      bagNo: qr.bagNo,
+      label: qr.label,
+      state: qr.state,
+      printed: qr.printed,
+      inwardId: qr.inwardId,
+      outwardId: qr.outwardId,
+      scannedAtOutward: qr.scannedAtOutward,
+      scannedAtProduction: qr.scannedAtProduction,
+      consumedAt: qr.consumedAt,
+      inward: qr.inward,
+      createdAt: qr.createdAt,
+    };
+
+    console.log('✅ Returning QR data');
+    console.log('========== END getQrByQrId ==========\n');
+    return result;
   }
 }

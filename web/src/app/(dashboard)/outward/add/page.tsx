@@ -4,7 +4,10 @@ import api from '@/lib/api';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { useMaterialStock } from '@/hooks/useMaterialStock';
+import {
+  useAvailableForOutward,
+  InwardEntryForOutward,
+} from '@/hooks/useMaterialStock';
 import { useCreateOutward } from '@/hooks/useOutwards';
 
 import { Header, PageContainer, Card } from '@/components/global';
@@ -22,40 +25,49 @@ import {
 
 export default function AddOutwardPage() {
   const router = useRouter();
-  const { data: stock = [], isLoading } = useMaterialStock();
+  const { data: availableInwardEntries = [], isLoading } =
+    useAvailableForOutward();
   const { mutateAsync: createOutward, isPending } = useCreateOutward();
 
   const [formData, setFormData] = useState({
-    materialName: '',
+    inwardId: '',
     unit: '',
     issuedTo: '',
     numBags: '',
   });
 
-  const handleChange = (key: string, value: any) => {
+  const handleChange = (key: string, value: string | number) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
 
-  const selectedMaterial = stock.find(
-    (m) => m.materialName === formData.materialName
-  );
+  const selectedInwardEntry = (
+    availableInwardEntries as InwardEntryForOutward[]
+  ).find((entry) => entry.id.toString() === formData.inwardId);
 
-  // 🧩 Fetch available bag details for selected material
+  // 🧩 Fetch available bag details for selected inward entry
   const { data: availableBags = [], isFetching } = useQuery({
-    queryKey: ['availableBags', formData.materialName],
+    queryKey: ['availableBags', formData.inwardId],
     queryFn: async () => {
-      if (!formData.materialName) return [];
+      if (!formData.inwardId) return [];
+      console.log('Fetching available bags for inward ID:', formData.inwardId);
       const res = await api.get(
-        `/inward/available-bags/${formData.materialName}`
+        `/inward/available-bags-by-inward/${formData.inwardId}`
       );
+      console.log('Available bags response:', res.data);
       return res.data;
     },
-    enabled: !!formData.materialName,
+    enabled: !!formData.inwardId,
   });
 
-  const totalAvailableBags = availableBags.length;
-  const bagWeight = availableBags[0]?.inward?.bagWeight || 0;
-  const unit = availableBags[0]?.inward?.unit || selectedMaterial?.unit || 'KG';
+  const totalAvailableBags = (
+    availableBags as Array<{
+      qrId: string;
+      bagNo: number;
+      inward: { bagWeight: number; unit: string };
+    }>
+  ).length;
+  const bagWeight = selectedInwardEntry?.bagWeight || 0;
+  const unit = selectedInwardEntry?.unit || 'KG';
 
   // 🧮 Auto compute total quantity = numBags * bagWeight
   const totalQty =
@@ -64,8 +76,13 @@ export default function AddOutwardPage() {
       : 0;
 
   const handleSubmit = async () => {
+    console.log('Form data:', formData);
+    console.log('Selected inward entry:', selectedInwardEntry);
+    console.log('Available bags:', availableBags);
+    console.log('Total available bags:', totalAvailableBags);
+
     if (
-      !formData.materialName ||
+      !formData.inwardId ||
       !formData.issuedTo ||
       !formData.numBags ||
       Number(formData.numBags) < 1
@@ -73,7 +90,7 @@ export default function AddOutwardPage() {
       toast({
         title: 'Missing Fields',
         description:
-          'Please select material, enter issued to, and valid number of bags.',
+          'Please select material entry, enter issued to, and valid number of bags.',
         variant: 'destructive',
       });
       return;
@@ -89,20 +106,24 @@ export default function AddOutwardPage() {
     }
 
     try {
-      const selectedQrIds = availableBags
+      const selectedQrIds = (availableBags as Array<{ qrId: string }>)
         .slice(0, Number(formData.numBags))
-        .map((b: any) => b.qrId);
+        .map((b: { qrId: string }) => b.qrId);
+
+      console.log('Selected QR IDs:', selectedQrIds);
 
       const payload = {
-        materialName: formData.materialName,
+        inwardId: Number(formData.inwardId),
         issuedTo: formData.issuedTo,
         quantity: totalQty,
         unit,
         selectedQrIds,
         purpose: 'Production',
-        remarks: `Issued ${formData.numBags} bag(s) of ${formData.materialName}`,
+        remarks: `Issued ${formData.numBags} bag(s) of ${selectedInwardEntry?.materialName} (${selectedInwardEntry?.supplierName} - ${bagWeight}${unit} bags)`,
         status: 'Pending',
       };
+
+      console.log('Payload:', payload);
 
       await createOutward(payload);
 
@@ -112,11 +133,23 @@ export default function AddOutwardPage() {
       });
 
       router.push('/outward');
-    } catch (error: any) {
-      console.error(error);
+    } catch (error: unknown) {
+      const errMsg =
+        error instanceof Error ? error.message : 'Failed to save entry.';
+      console.error('Error creating outward:', error);
+      let responseMessage = errMsg;
+
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as {
+          response?: { data?: { message?: string } };
+        };
+        console.error('Error response:', axiosError.response);
+        responseMessage = axiosError.response?.data?.message || errMsg;
+      }
+
       toast({
         title: 'Error',
-        description: error.response?.data?.message || 'Failed to save entry.',
+        description: responseMessage,
         variant: 'destructive',
       });
     }
@@ -137,34 +170,58 @@ export default function AddOutwardPage() {
           </h3>
 
           <div className="space-y-6">
-            {/* Material selection */}
+            {/* Inward Entry selection */}
             <div>
-              <Label className="text-gray-900 font-medium">Material</Label>
+              <Label className="text-gray-900 font-medium">
+                Material Entry
+              </Label>
               <Select
-                value={formData.materialName}
+                value={formData.inwardId}
                 onValueChange={(v) => {
-                  handleChange('materialName', v);
+                  handleChange('inwardId', v);
                   handleChange('numBags', '');
                 }}
                 disabled={isLoading}
               >
                 <SelectTrigger className="bg-white mt-1">
                   <SelectValue
-                    placeholder={isLoading ? 'Loading...' : 'Select material'}
+                    placeholder={
+                      isLoading ? 'Loading...' : 'Select material entry'
+                    }
                   />
                 </SelectTrigger>
                 <SelectContent className="bg-white shadow-md max-h-64 overflow-y-auto">
-                  {stock.map((m) => (
-                    <SelectItem key={m.materialName} value={m.materialName}>
-                      {m.materialName} — {m.totalQuantity} {m.unit}
-                    </SelectItem>
-                  ))}
+                  {(
+                    availableInwardEntries as Array<{
+                      id: number;
+                      materialName: string;
+                      supplierName: string;
+                      bagWeight: number;
+                      unit: string;
+                      _count: { qrCodes: number };
+                    }>
+                  ).map(
+                    (entry: {
+                      id: number;
+                      materialName: string;
+                      supplierName: string;
+                      bagWeight: number;
+                      unit: string;
+                      _count: { qrCodes: number };
+                    }) => (
+                      <SelectItem key={entry.id} value={entry.id.toString()}>
+                        {entry.materialName} - {entry.supplierName} -{' '}
+                        {entry.bagWeight}
+                        {entry.unit} bags ({entry._count.qrCodes} available)
+                      </SelectItem>
+                    )
+                  )}
                 </SelectContent>
               </Select>
             </div>
 
             {/* Bag info */}
-            {formData.materialName && (
+            {formData.inwardId && (
               <div className="space-y-2">
                 {isFetching ? (
                   <p className="text-gray-500 text-sm">
@@ -173,8 +230,9 @@ export default function AddOutwardPage() {
                 ) : (
                   <>
                     <p className="text-sm text-gray-700">
-                      <strong>{totalAvailableBags}</strong> bag(s) available —
-                      each weighing <strong>{bagWeight}</strong> {unit}.
+                      <strong>{totalAvailableBags}</strong> bag(s) available
+                      from <strong>{selectedInwardEntry?.supplierName}</strong>{' '}
+                      — each weighing <strong>{bagWeight}</strong> {unit}.
                     </p>
 
                     <div>

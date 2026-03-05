@@ -59,6 +59,34 @@ export class InwardController {
     return this.inwardService.getAvailableBags(material);
   }
 
+  @Get('available-bags-by-inward/:inwardId')
+  async getAvailableBagsByInward(
+    @Param('inwardId', ParseIntPipe) inwardId: number
+  ) {
+    return this.inwardService.getAvailableBagsByInward(inwardId);
+  }
+
+  @Get('available-for-outward')
+  async getAvailableForOutward() {
+    return this.inwardService.getAvailableForOutward();
+  }
+
+  @Get('qr/:qrId')
+  async getQrByQrId(@Param('qrId') qrId: string) {
+    console.log('\n========== 📱 QR LOOKUP ENDPOINT HIT ==========');
+    console.log('🔍 Controller received QR ID:', qrId);
+    console.log('⏱️  Timestamp:', new Date().toISOString());
+
+    try {
+      const result = await this.inwardService.getQrByQrId(qrId);
+      console.log('✅ Service returned result');
+      return result;
+    } catch (error: any) {
+      console.error('❌ Controller error:', error.message);
+      throw error;
+    }
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.inwardService.findOne(id);

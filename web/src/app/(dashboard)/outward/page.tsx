@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useMemo } from 'react';
+import api from '@/lib/api';
+import { useState, useMemo, useCallback } from 'react';
 import { Plus, Trash2, QrCode, Pencil } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { Card, Header, PageContainer, Section } from '@/components/global';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/use-toast';
 import { StatsGrid } from '@/components/global';
 import { KpiCard } from '@/components/ui/kpi-card';
 import ProductionScanModal from './components/ProductionScanModal';
@@ -17,6 +19,7 @@ import {
   useOutwardData,
   useDeleteOutward,
 } from '@/hooks/useOutwards';
+import { useScannerListener } from '@/hooks/useScannerListener';
 import FilterBar from '@/components/ui/filter-bar';
 import { DataTableShell } from '@/components/ui/datatable-shell';
 import { Outward } from '@/types/outward';
@@ -42,6 +45,236 @@ export default function OutwardPage() {
 
   const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState<Outward | null>(null);
+  const [isClosingBins, setIsClosingBins] = useState(false);
+
+  // Handle scanned QR from global listener
+  const handleScanDetected = useCallback(
+    async (qrId: string) => {
+      console.log('\n========== 🔍 OUTWARD PAGE DETECTED SCAN ==========');
+      console.log('📱 Scanned QR ID:', qrId);
+      console.log('⏱️  Processing started:', new Date().toISOString());
+      console.log('📋 Current outward data available:', data.length);
+
+      try {
+        // Step 1: Fetch QR details from database
+        console.log('\n📡 Step 1: Fetching QR details from database...');
+        console.log('🔗 API URL: /inward/qr/' + qrId);
+
+        let qrData;
+        try {
+          const qrResponse = await api.get(`/inward/qr/${qrId}`);
+          qrData = qrResponse.data;
+          console.log('✅ API Response received');
+        } catch (apiError: any) {
+          console.error('❌ API Error when fetching QR:', {
+            status: apiError.response?.status,
+            message: apiError.response?.data?.message,
+            fullError: apiError.message,
+          });
+          throw apiError;
+        }
+
+        console.log('✅ QR Details Retrieved:', {
+          qrId: qrData?.qrId,
+          state: qrData?.state,
+          inwardId: qrData?.inwardId,
+          material: qrData?.inward?.materialName,
+          supplier: qrData?.inward?.supplierName,
+          bagWeight: qrData?.inward?.bagWeight,
+          unit: qrData?.inward?.unit,
+        });
+
+        // Step 2: Validate QR state
+        console.log('\n🔍 Step 2: Validating QR state...');
+        if (qrData.state !== 'CREATED') {
+          console.error('❌ Invalid QR state:', qrData.state);
+          console.log('⚠️  QR State Details:', {
+            current: qrData.state,
+            expected: 'CREATED',
+            reason:
+              qrData.state === 'ISSUED'
+                ? 'QR already scanned for outward'
+                : 'QR already used in production',
+          });
+          return;
+        }
+        console.log('✅ QR state valid:', qrData.state);
+
+        // Step 3: Fetch all outward entries to find matches
+        console.log('\n📊 Step 3: Fetching all outward entries...');
+        console.log('📋 Local data count:', data.length);
+
+        let outwardEntries = data;
+
+        // Always fetch fresh data from API to ensure we have latest outward entries
+        console.log('🔄 Fetching fresh outward data from API...');
+        try {
+          const outwardResponse = await api.get('/outward');
+          outwardEntries = outwardResponse.data || [];
+          console.log(
+            `✅ Fetched ${outwardEntries.length} outward entries from API`
+          );
+
+          if (outwardEntries.length > 0) {
+            console.log('📋 Available outward entries:');
+            outwardEntries.forEach((o: any) => {
+              console.log(
+                `   #${o.id}: ${o.materialName} | Status: ${o.status}`
+              );
+            });
+          } else {
+            console.warn('⚠️  API returned empty outward list');
+          }
+        } catch (apiError) {
+          console.warn('⚠️  API fetch failed, using local data:', apiError);
+          outwardEntries = data;
+        }
+
+        if (outwardEntries.length === 0) {
+          console.error(
+            '❌ No outward entries available (both API and local empty)'
+          );
+          return;
+        }
+
+        console.log(
+          `\n📊 Step 4: Matching QR with available outward entries (${outwardEntries.length} total)...`
+        );
+        console.log('Looking for outward entries with material:', {
+          material: qrData.inward.materialName,
+          supplier: qrData.inward.supplierName,
+          bagWeight: qrData.inward.bagWeight,
+          unit: qrData.inward.unit,
+        });
+
+        // Find matching outward entries by material
+        const matchingOutwards = outwardEntries.filter((outward) => {
+          // Check if material name matches
+          const materialMatch =
+            outward.materialName === qrData.inward.materialName;
+
+          console.log(`  - Outward #${outward.id}: ${outward.materialName}`, {
+            match: materialMatch,
+            status: outward.status,
+            scanned: outward.qrScanStatus?.scannedBags || 0,
+            total: outward.qrScanStatus?.totalBags || 0,
+          });
+
+          return materialMatch;
+        });
+
+        if (matchingOutwards.length === 0) {
+          console.error(
+            '❌ No matching outward entries found for this material'
+          );
+          console.log('🔴 Looking for material:', qrData.inward.materialName);
+          console.log('📋 All available outwards:');
+          outwardEntries.forEach((o: any) => {
+            console.log(
+              `   #${o.id}: ${o.materialName} (Match: ${
+                o.materialName === qrData.inward.materialName
+              })`
+            );
+          });
+          return;
+        }
+
+        console.log(
+          `\n✅ Found ${matchingOutwards.length} matching outward entries:`
+        );
+        matchingOutwards.forEach((outward) => {
+          console.log(
+            `  📦 Outward #${outward.id}: ${outward.materialName} | Status: ${
+              outward.status
+            } | Scanned: ${outward.qrScanStatus?.scannedBags || 0}/${
+              outward.qrScanStatus?.totalBags || 0
+            }`
+          );
+        });
+
+        // Step 5: Suggest which outward to use
+        console.log('\n🎯 Step 5: Determining best outward match...');
+
+        // Priority: Pending status with same material
+        let targetOutward = matchingOutwards.find(
+          (o) => o.status === 'Pending'
+        );
+
+        if (!targetOutward) {
+          console.warn('⚠️  No pending outward found, using first match');
+          targetOutward = matchingOutwards[0];
+        }
+
+        if (targetOutward) {
+          console.log('✅ MATCHED OUTWARD ENTRY:', {
+            id: targetOutward.id,
+            material: targetOutward.materialName,
+            status: targetOutward.status,
+            scanned: targetOutward.qrScanStatus?.scannedBags || 0,
+            total: targetOutward.qrScanStatus?.totalBags || 0,
+          });
+
+          console.log('\n🔐 VALIDATION SUMMARY:');
+          console.log('✅ QR State: CREATED (valid for outward)');
+          console.log(
+            `✅ Material Match: ${qrData.inward.materialName} = ${targetOutward.materialName}`
+          );
+          console.log(
+            `✅ Outward Status: ${targetOutward.status} (can accept scans)`
+          );
+          console.log(`✅ Supplier: ${qrData.inward.supplierName}`);
+          console.log(
+            `✅ Bag Weight: ${qrData.inward.bagWeight} ${qrData.inward.unit}`
+          );
+
+          console.log('\n🚀 READY TO PROCESS:');
+          console.log(`  QR: ${qrId}`);
+          console.log(`  → Outward Entry #${targetOutward.id}`);
+          console.log(
+            `  → Progress: ${targetOutward.qrScanStatus?.scannedBags || 0} of ${
+              targetOutward.qrScanStatus?.totalBags || 0
+            } bags`
+          );
+        }
+      } catch (error: unknown) {
+        console.error('\n❌ CATCH BLOCK - ERROR Processing QR:', error);
+
+        const err = error as any;
+        console.error('🔴 Error Details:', {
+          hasResponse: !!err.response,
+          status: err.response?.status,
+          statusText: err.response?.statusText,
+          message: err.message,
+          data: err.response?.data,
+        });
+
+        if (err.response?.status === 404) {
+          console.error(
+            '🔴 QR not found in database - Wrong QR ID or not in system:',
+            qrId
+          );
+        } else if (err.response?.status === 400) {
+          console.error('🔴 Bad request:', err.response?.data?.message);
+        } else if (err.message === 'Network Error' || !err.response) {
+          console.error('🔴 Network error - Backend might not be running');
+          console.error(
+            '   Check: Is "npm run start:dev" running in api/ folder?'
+          );
+        } else {
+          console.error(
+            '🔴 Unexpected error:',
+            err.response?.data || err.message
+          );
+        }
+      }
+
+      console.log('========== END QR VALIDATION ==========\n');
+    },
+    [data]
+  );
+
+  // Enable scanner listener on this page
+  useScannerListener(handleScanDetected, true);
 
   const stats = useOutwardAnalytics().data || {
     total: 0,
@@ -120,6 +353,35 @@ export default function OutwardPage() {
             Production Scan
           </Button>
 
+          <Button
+            className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white"
+            onClick={async () => {
+              try {
+                setIsClosingBins(true);
+                await api.post('/plc/close-bins');
+                toast({
+                  title: 'Bins closed',
+                  description:
+                    'All bins signalled to close (d540-d574 set to 1)',
+                });
+              } catch (err: any) {
+                console.error('Error closing bins', err);
+                toast({
+                  title: 'Error',
+                  description:
+                    err?.response?.data?.message ||
+                    err?.message ||
+                    'Failed to close bins',
+                });
+              } finally {
+                setIsClosingBins(false);
+              }
+            }}
+            disabled={isClosingBins}
+          >
+            Close All Bins
+          </Button>
+
           <Link href="/outward/add">
             <Button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white">
               <Plus size={16} />
@@ -185,11 +447,31 @@ export default function OutwardPage() {
                 {
                   key: 'numberOfBags',
                   header: 'Bags',
-                  render: (r) => (
-                    <span className="text-gray-600">
-                      {r.qrScanStatus?.totalBags || 0}
-                    </span>
-                  ),
+                  render: (r) => {
+                    const scanned = r.qrScanStatus?.scannedBags || 0;
+                    const total = r.qrScanStatus?.totalBags || 0;
+                    return (
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-600 font-medium">
+                          {scanned}/{total}
+                        </span>
+                        {scanned > 0 && total > 0 && (
+                          <div className="w-16 bg-gray-200 rounded-full h-1.5">
+                            <div
+                              className={`h-1.5 rounded-full ${
+                                scanned >= total
+                                  ? 'bg-green-500'
+                                  : 'bg-blue-500'
+                              }`}
+                              style={{
+                                width: `${(scanned / total) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  },
                 },
                 {
                   key: 'createdAt',

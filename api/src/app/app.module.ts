@@ -7,7 +7,8 @@ import { BinsModule } from '../bins/bins.module';
 import { ProductionModule } from '../production/production.module';
 import { RecipeModule } from '../recipe/recipe.module';
 import { BatchModule } from '../batch/batch.module';
-// import { PlcModule } from '../plc/plc.module';
+import { PrinterModule } from '../printer/printer.module';
+import { PlcModule } from '../plc/plc.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { BatchModule } from '../batch/batch.module';
     RecipeModule,
     BatchModule,
     // PlcModule,
+    PrinterModule,
   ],
 })
 export class AppModule {}
