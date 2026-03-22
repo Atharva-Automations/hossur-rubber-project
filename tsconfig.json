@@ -11,6 +11,12 @@
     },
     {
       "path": "./web"
+    },
+    {
+      "path": "./plc-service-e2e"
+    },
+    {
+      "path": "./plc-service"
     }
   ]
 }

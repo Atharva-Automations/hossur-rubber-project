@@ -52,7 +52,7 @@
       "options": {
         "targetName": "test"
       },
-      "exclude": ["api-e2e/**/*"]
+      "exclude": ["api-e2e/**/*", "plc-service-e2e/**/*"]
     },
     {
       "plugin": "@nx/next/plugin",
@@ -69,6 +69,11 @@
   "targetDefaults": {
     "test": {
       "dependsOn": ["^build"]
+    },
+    "@nx/esbuild:esbuild": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
     }
   },
   "generators": {
