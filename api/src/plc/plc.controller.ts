@@ -4,7 +4,7 @@ import {
   Query,
   Post,
   Body,
-  BadRequestException,
+  // BadRequestException,
 } from '@nestjs/common';
 import { PlcService } from './plc.service';
 import { InwardService } from '../inward/inward.service';
