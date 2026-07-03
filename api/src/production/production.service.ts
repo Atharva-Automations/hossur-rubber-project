@@ -69,9 +69,11 @@ export class ProductionService {
       },
     });
 
+    const binNumber = Number(bin.binNumber.replace('B', ''));
+
     return {
       message: `QR ${qrId} consumed successfully and ${bagWeight}${qr.inward.unit} added to ${bin.binNumber}.`,
-      binNumber: bin.binNumber,
+      binNumber: binNumber,
       newQuantity: newQty,
       ingredient: ingredient.name || ingredient.ingredientCode,
     };

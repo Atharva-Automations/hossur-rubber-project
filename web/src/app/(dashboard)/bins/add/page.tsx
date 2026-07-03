@@ -34,12 +34,7 @@ export default function AssignBinPage() {
     maxQuantity?: string;
   }>({});
 
-  const availableBins = (
-    allBins as unknown as Array<{ binNumber?: string; ingredientId?: unknown }>
-  )
-    .filter((b) => !b?.ingredientId && b?.binNumber)
-    .map((b) => b?.binNumber || '')
-    .filter((b) => b !== ''); // Filter out empty strings
+  const availableBins = (allBins as string[]).filter((b) => !!b);
 
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};

@@ -34,7 +34,7 @@ export class PrinterService {
       'GAP 2 mm, 0 mm',
       'DIRECTION 0',
       'CLS',
-      'QRCODE 100,60,H,5,A,0,"' + qrId + '"',
+      'QRCODE 100,60,M,8,A,0,M2,"' + qrId + '"',
       'TEXT 100,280,"3",0,1,1,"' + qrId + '"',
       'PRINT 1',
       '',

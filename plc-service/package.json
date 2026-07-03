@@ -98,6 +98,7 @@
     }
   },
   "dependencies": {
+    "axios": "^1.18.1",
     "express": "^4.21.2"
   }
 }
