@@ -72,6 +72,7 @@ model InwardEntry {
   id            Int            @id @default(autoincrement())
   materialName  String
   supplierName  String
+  batchNumber   String?
   quantity      Float
   unit          String
   bagWeight     Float?

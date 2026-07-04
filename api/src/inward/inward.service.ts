@@ -233,6 +233,7 @@ export class InwardService {
         data: {
           materialName,
           supplierName,
+          batchNumber: dto.batchNumber?.trim() || null,
           quantity: dto.quantity,
           unit: dto.unit,
           bagWeight: bagWeight,
@@ -332,6 +333,10 @@ export class InwardService {
         data: {
           materialName: nextMaterialName,
           supplierName: nextSupplierName,
+          batchNumber:
+            dto.batchNumber !== undefined
+              ? dto.batchNumber.trim() || null
+              : existing.batchNumber,
           quantity: dto.quantity ?? existing.quantity,
           unit: dto.unit ?? existing.unit,
           bagWeight: newBagWeight,
@@ -648,6 +653,7 @@ export class InwardService {
             id: true,
             materialName: true,
             supplierName: true,
+            batchNumber: true,
             bagWeight: true,
             unit: true,
             quantity: true,

@@ -10,9 +10,6 @@ export function useMaterialStock() {
       console.log('Material stock response:', res.data);
       return res.data;
     },
-    onError: (error) => {
-      console.error('Error fetching material stock:', error);
-    },
   });
 }
 
@@ -24,9 +21,6 @@ export function useAvailableForOutward() {
       const res = await api.get('/inward/available-for-outward');
       console.log('Available for outward response:', res.data);
       return res.data;
-    },
-    onError: (error) => {
-      console.error('Error fetching available inward entries:', error);
     },
   });
 }

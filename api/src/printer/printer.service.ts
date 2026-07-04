@@ -1,16 +1,32 @@
 import { Injectable } from '@nestjs/common';
 import * as net from 'net';
+import { PrismaService } from '../prisma/prisma.service';
+
+interface PrinterLabelData {
+  qrId: string;
+  materialName: string;
+  supplierName: string;
+  batchNumber?: string | null;
+  quantity: number;
+  unit: string;
+  mfgDate: string;
+  expDate: string;
+  julianDate: string;
+}
 
 @Injectable()
 export class PrinterService {
   private printerIP = '192.168.1.75';
   private printerPort = 9100;
 
+  constructor(private readonly prisma: PrismaService) {}
+
   /**
    * Print single label with QR code and ID
    */
   async printLabel(qrId: string): Promise<void> {
-    const tspl = this.generateTSPL(qrId);
+    const labelData = await this.getLabelData(qrId);
+    const tspl = this.generateTSPL(labelData);
     await this.sendToPrinter(tspl);
   }
 
@@ -25,20 +41,103 @@ export class PrinterService {
     }
   }
 
+  private async getLabelData(qrId: string): Promise<PrinterLabelData> {
+    const qr = await this.prisma.inwardQrCode.findUnique({
+      where: { qrId },
+      select: {
+        qrId: true,
+        inward: {
+          select: {
+            materialName: true,
+            supplierName: true,
+            batchNumber: true,
+            quantity: true,
+            unit: true,
+            mfgDate: true,
+            expDate: true,
+          },
+        },
+      },
+    });
+
+    if (!qr?.inward) {
+      throw new Error(`No inward record found for QR ${qrId}`);
+    }
+
+    return {
+      qrId,
+      materialName: qr.inward.materialName,
+      supplierName: qr.inward.supplierName,
+      batchNumber: qr.inward.batchNumber,
+      quantity: qr.inward.quantity,
+      unit: qr.inward.unit,
+      mfgDate: this.formatDate(qr.inward.mfgDate),
+      expDate: this.formatDate(qr.inward.expDate),
+      julianDate: this.getJulianDate(new Date()),
+    };
+  }
+
   /**
    * Generate TSPL command for single label
    */
-  private generateTSPL(qrId: string): string {
-    return [
+  private generateTSPL(data: PrinterLabelData): string {
+    const lines = [
       'SIZE 100 mm, 50 mm',
       'GAP 2 mm, 0 mm',
       'DIRECTION 0',
       'CLS',
-      'QRCODE 100,60,M,8,A,0,M2,"' + qrId + '"',
-      'TEXT 100,280,"3",0,1,1,"' + qrId + '"',
-      'PRINT 1',
+      'BOX 4,4, 770,370, 5',
+      'TEXT 100,20,"0",0,18,15,"PREMIER SEALING PRODUCTS"',
+      'BAR 4,70,765,5',
+      `QRCODE 70,120,M,8,A,0,M2,"${this.escapeTsplText(data.qrId)}"`,
+      `TEXT 90,300,"0",0,9,9,"${this.escapeTsplText(data.qrId)}"`,
+      'BAR 300,70,5,300',
+      `TEXT 330,100,"0",0,9,9,"MATERIAL NAME : ${this.escapeTsplText(
+        data.materialName
+      )}"`,
+      `TEXT 330,140,"0",0,9,9,"SUPPLIER NAME : ${this.escapeTsplText(
+        data.supplierName
+      )}"`,
+      `TEXT 330,180,"0",0,9,9,"BATCH NO. : ${this.escapeTsplText(
+        data.batchNumber || 'N/A'
+      )}"`,
+      `TEXT 330,220,"0",0,9,9,"QUANTITY : ${this.escapeTsplText(
+        `${data.quantity} ${data.unit}`
+      )}"`,
+      `TEXT 330,260,"0",0,9,9,"MFG DATE : ${this.escapeTsplText(
+        data.mfgDate
+      )}"`,
+      `TEXT 330,300,"0",0,9,9,"EXP DATE : ${this.escapeTsplText(
+        data.expDate
+      )}"`,
+      `TEXT 700,340,"0",0,7,6,"${this.escapeTsplText(data.julianDate)}"`,
+      'PRINT 1,1',
       '',
-    ].join('\r\n');
+    ];
+
+    return lines.join('\r\n');
+  }
+
+  private formatDate(value: Date | string): string {
+    const date = value instanceof Date ? value : new Date(value);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+
+  private getJulianDate(date: Date): string {
+    const start = new Date(Date.UTC(date.getUTCFullYear(), 0, 0));
+    const diff = date.getTime() - start.getTime();
+    const oneDay = 1000 * 60 * 60 * 24;
+    const dayOfYear = Math.floor(diff / oneDay);
+    return `${String(date.getUTCFullYear()).slice(-2)}${String(
+      dayOfYear
+    ).padStart(3, '0')}`;
+  }
+
+  private escapeTsplText(value: string): string {
+    return String(value ?? '').replace(/"/g, "'");
   }
 
   /**

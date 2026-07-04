@@ -90,6 +90,7 @@ export default function AddInwardPage() {
   const [formData, setFormData] = useState<CreateInwardPayload>({
     materialName: '',
     supplierName: '',
+    batchNumber: '',
     quantity: 0,
     unit: 'KG',
     bagWeight: undefined,
@@ -370,6 +371,16 @@ export default function AddInwardPage() {
 
               <Separator />
 
+              {/* Batch Number */}
+              <div>
+                <Label>Batch Number</Label>
+                <Input
+                  value={formData.batchNumber || ''}
+                  placeholder="Enter batch number..."
+                  onChange={(e) => handleChange('batchNumber', e.target.value)}
+                />
+              </div>
+
               {/* Quantity + Unit */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -538,6 +549,13 @@ export default function AddInwardPage() {
                   <p className="text-gray-600">Supplier</p>
                   <p className="font-medium text-gray-900">
                     {formData.supplierName || '—'}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-gray-600">Batch Number</p>
+                  <p className="font-medium text-gray-900">
+                    {formData.batchNumber || '—'}
                   </p>
                 </div>
 

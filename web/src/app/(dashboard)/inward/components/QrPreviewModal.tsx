@@ -18,6 +18,9 @@ export default function QrPreviewModal({ open, onClose, inwardId }: any) {
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [printProgress, setPrintProgress] = useState({ current: 0, total: 0 });
+  const [printerStatus, setPrinterStatus] = useState<
+    'unknown' | 'connected' | 'disconnected'
+  >('unknown');
 
   useEffect(() => {
     if (open && inwardId) {
@@ -77,12 +80,15 @@ export default function QrPreviewModal({ open, onClose, inwardId }: any) {
       const response = await api.get('/printer/status');
       if (response.data.connected) {
         console.log('Printer status:', response.data);
+        setPrinterStatus('connected');
         toast.success('Printer is connected and ready');
       } else {
         console.log('Printer status:', response.data);
+        setPrinterStatus('disconnected');
         toast.error('Printer not connected: ' + response.data.error);
       }
     } catch (error) {
+      setPrinterStatus('disconnected');
       toast.error('Cannot connect to printer service');
     }
   };
@@ -98,9 +104,37 @@ export default function QrPreviewModal({ open, onClose, inwardId }: any) {
 
         {/* Printer Status */}
         <div className="px-4 py-2 bg-gray-50 rounded-lg flex justify-between items-center">
-          <span className="text-sm text-gray-600">
-            TSC TA220 Thermal Printer
-          </span>
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-3 h-3 rounded-full ${
+                printerStatus === 'connected'
+                  ? 'bg-green-500'
+                  : printerStatus === 'disconnected'
+                  ? 'bg-red-500'
+                  : 'bg-gray-400'
+              }`}
+            />
+
+            <span className="text-sm font-medium text-gray-700">
+              Printer Status:
+            </span>
+
+            <span
+              className={`text-sm font-semibold ${
+                printerStatus === 'connected'
+                  ? 'text-green-600'
+                  : printerStatus === 'disconnected'
+                  ? 'text-red-600'
+                  : 'text-gray-500'
+              }`}
+            >
+              {printerStatus === 'connected'
+                ? 'Connected'
+                : printerStatus === 'disconnected'
+                ? 'Not Connected'
+                : 'N/A'}
+            </span>
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -150,7 +184,7 @@ export default function QrPreviewModal({ open, onClose, inwardId }: any) {
                   size="sm"
                   className="mt-2 w-full"
                   onClick={() => handlePrintSingle(qr.qrId)}
-                  disabled={printing}
+                  disabled={printing || printerStatus !== 'connected'}
                 >
                   {printing ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -171,7 +205,7 @@ export default function QrPreviewModal({ open, onClose, inwardId }: any) {
             <Button
               className="bg-green-600 hover:bg-green-700"
               onClick={handlePrintAll}
-              disabled={printing}
+              disabled={printing || printerStatus !== 'connected'}
             >
               {printing ? (
                 <>

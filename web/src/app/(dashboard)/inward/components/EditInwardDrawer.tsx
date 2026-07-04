@@ -54,6 +54,7 @@ export default function EditInwardDrawer({
       setFormData({
         materialName: item.materialName,
         supplierName: item.supplierName,
+        batchNumber: item.batchNumber ?? undefined,
         quantity: item.quantity,
         unit: item.unit,
         bagWeight: item.bagWeight ?? undefined,
@@ -184,6 +185,15 @@ export default function EditInwardDrawer({
                   {errors.supplierName}
                 </p>
               )}
+            </div>
+
+            {/* Batch Number */}
+            <div>
+              <Label>Batch Number</Label>
+              <Input
+                value={formData.batchNumber ?? ''}
+                onChange={(e) => handleChange('batchNumber', e.target.value)}
+              />
             </div>
 
             {/* Quantity + Unit + Bag weight */}

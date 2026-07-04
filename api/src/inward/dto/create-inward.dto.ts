@@ -26,6 +26,11 @@ export class CreateInwardDto {
   @IsNotEmpty()
   supplierName!: string;
 
+  @IsOptional()
+  @Transform(({ value }) => value?.trim())
+  @IsString()
+  batchNumber?: string;
+
   @IsEnum(UnitType)
   unit!: UnitType;
 

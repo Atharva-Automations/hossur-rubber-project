@@ -8,6 +8,7 @@ export interface Inward {
   id: number;
   materialName: string;
   supplierName: string;
+  batchNumber?: string | null;
   quantity: number;
   unit: 'KG' | 'L';
   bagWeight?: number | null;
@@ -23,6 +24,7 @@ export interface Inward {
 export interface CreateInwardPayload {
   materialName: string;
   supplierName: string;
+  batchNumber?: string;
   quantity: number;
   unit: UnitType;
   mfgDate: string; // ISO date or yyyy-mm-dd
