@@ -8,7 +8,8 @@ import { ProductionModule } from '../production/production.module';
 import { RecipeModule } from '../recipe/recipe.module';
 import { BatchModule } from '../batch/batch.module';
 import { PrinterModule } from '../printer/printer.module';
-import { PlcModule } from '../plc/plc.module';
+import { ExecutionModule } from '../execution/execution.module';
+// import { PlcModule } from '../plc/plc.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { PlcModule } from '../plc/plc.module';
     BatchModule,
     // PlcModule,
     PrinterModule,
+    ExecutionModule,
   ],
 })
 export class AppModule {}

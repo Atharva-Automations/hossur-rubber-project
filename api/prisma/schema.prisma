@@ -186,6 +186,7 @@ model Ingredient {
   bins            BinAssignment[]
   recipeLinks     StepIngredient[]
   BatchIngredient BatchIngredient[]
+  executionIngredients ExecutionIngredient[]
 }
 
 // ─────────────────────────────────────────────
@@ -217,6 +218,7 @@ model Recipe {
 
   steps RecipeStep[]
   Batch Batch[]
+  executions Execution[]
 }
 
 // ─────────────────────────────────────────────
@@ -236,6 +238,7 @@ model RecipeStep {
 
   ingredients StepIngredient[]
   batchSteps  BatchStep[]
+  executionIngredients ExecutionIngredient[]
 
   @@index([recipeId])
 }
@@ -254,6 +257,8 @@ model StepIngredient {
   quantity Float
   tolerance Float
   unit     String
+
+  executionIngredients ExecutionIngredient[]
 }
 
 // ─────────────────────────────────────────────
@@ -560,11 +565,8 @@ model ExecutionIngredient {
 
   ingredientId     Int
   ingredient       Ingredient @relation(fields: [ingredientId], references: [id])
-  binNumber String?
 
   qrId             String @unique
-
-  batchSequence Int
 
   plcIngredientIndex Int
 
