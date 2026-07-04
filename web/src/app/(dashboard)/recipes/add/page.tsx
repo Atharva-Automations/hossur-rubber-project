@@ -20,6 +20,7 @@ type StepIngredient = {
   id: string;
   name: string;
   quantity: string;
+  tolerance: string;
   unit: Unit;
 };
 
@@ -90,6 +91,13 @@ function validateDraft(d: RecipeDraft) {
             `Ingredient "${ing.name || '(unnamed)'}" needs a quantity > 0.`
           );
         }
+        if (ing.tolerance === '' || Number(ing.tolerance) < 0) {
+          errs.push(
+            `Ingredient "${
+              ing.name || '(unnamed)'
+            }" must have a valid tolerance.`
+          );
+        }
       }
     }
   }
@@ -141,7 +149,9 @@ export default function RecipeAddPage() {
             pressure: '',
             temperature: '',
             rpm: '',
-            ingredients: [{ id: uid(), name: '', quantity: '', unit: 'KG' }],
+            ingredients: [
+              { id: uid(), name: '', quantity: '', tolerance: '', unit: 'KG' },
+            ],
           },
         ],
       })
@@ -177,7 +187,13 @@ export default function RecipeAddPage() {
                 ...s,
                 ingredients: [
                   ...s.ingredients,
-                  { id: uid(), name: '', quantity: '', unit: 'KG' },
+                  {
+                    id: uid(),
+                    name: '',
+                    quantity: '',
+                    tolerance: '',
+                    unit: 'KG',
+                  },
                 ],
               }
             : s
@@ -281,6 +297,7 @@ export default function RecipeAddPage() {
             // backend expects ingredientCode here per our earlier agreement
             ingredientCode: i.name.trim(),
             quantity: Number(i.quantity),
+            tolerance: Number(i.tolerance),
             unit: i.unit,
           })),
         })),

@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsInt,
   IsNumber,
+  IsOptional,
   IsPositive,
   IsString,
   Min,
@@ -21,15 +22,19 @@ export enum StepType {
 export class StepIngredientDto {
   @IsString()
   @MinLength(1)
-  ingredientCode!: string; // e.g. IN001 (from Ingredient table)
+  ingredientCode!: string;
 
   @IsNumber()
   @IsPositive()
   quantity!: number;
 
+  @IsNumber()
+  @Min(0)
+  tolerance!: number;
+
   @IsString()
   @MinLength(1)
-  unit!: string; // e.g. "KG"
+  unit!: string;
 }
 
 export class RecipeStepDto {
@@ -45,17 +50,20 @@ export class RecipeStepDto {
   @Min(0)
   timerSeconds!: number;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  pressure!: number;
+  pressure?: number;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  temperature!: number;
+  temperature?: number;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  rpm!: number;
+  rpm?: number;
 
   @IsArray()
   @ValidateNested({ each: true })

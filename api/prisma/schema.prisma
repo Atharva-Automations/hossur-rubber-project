@@ -65,6 +65,31 @@ enum BulkSeedStatus {
   WEIGHED // weight confirmed, WeighedBag row created
 }
 
+enum ExecutionMode {
+  BULK
+  SEQUENTIAL
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+enum BatchExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+}
+
+enum IngredientExecutionStatus {
+  PENDING
+  SCANNED
+  COMPLETED
+  CANCELLED
+}
+
 // ─────────────────────────────────────────────
 // InwardEntry  — main batch-level record
 // ─────────────────────────────────────────────
@@ -205,9 +230,9 @@ model RecipeStep {
   stepType       StepType
   sequenceNumber Int
   timerSeconds   Int
-  pressure       Float
-  temperature    Float
-  rpm            Float
+  pressure       Float?
+  temperature    Float?
+  rpm            Float?
 
   ingredients StepIngredient[]
   batchSteps  BatchStep[]
@@ -227,6 +252,7 @@ model StepIngredient {
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
 
   quantity Float
+  tolerance Float
   unit     String
 }
 
@@ -272,9 +298,9 @@ model BatchStep {
   stepType       StepType // KNEADER or MIXING (Ref from Recipe DTO enum)
   sequenceNumber Int
   timerSeconds   Int
-  pressure       Float
-  temperature    Float
-  rpm            Float
+  pressure       Float?
+  temperature    Float?
+  rpm            Float?
   status         StepExecutionStatus @default(PENDING)
 
   startedAt   DateTime?
@@ -303,6 +329,8 @@ model BatchIngredient {
   totalQuantity   Float // Total for all units in batch
   unit            String
   sequenceInStep  Int    @default(1) // Order in which this ingredient appears in the step
+  plcIngredientIndex Int
+  tolerance Float
 
   batchStep      BatchStep          @relation(fields: [batchStepId], references: [id], onDelete: Cascade)
   ingredient     Ingredient         @relation(fields: [ingredientId], references: [id])
@@ -475,4 +503,83 @@ model FinalBatch {
   createdAt DateTime @default(now())
 
   batch Batch @relation(fields: [batchId], references: [id])
+}
+
+model Execution {
+  id           Int             @id @default(autoincrement())
+  executionCode String @unique
+
+  recipeId     Int
+  recipe       Recipe          @relation(fields: [recipeId], references: [id])
+
+  mode         ExecutionMode
+  totalBatches Int
+
+  status       ExecutionStatus @default(PENDING)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  batches      ExecutionBatch[]
+
+  @@index([recipeId])
+}
+
+model ExecutionBatch {
+  id           Int      @id @default(autoincrement())
+
+  executionId  Int
+  execution    Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  batchNumber  Int
+
+  status       BatchExecutionStatus @default(PENDING)
+
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  ingredients  ExecutionIngredient[]
+
+  isActive Boolean @default(false)
+
+  @@unique([executionId, batchNumber])
+  @@index([executionId])
+}
+
+model ExecutionIngredient {
+  id               Int      @id @default(autoincrement())
+
+  executionBatchId Int
+  executionBatch   ExecutionBatch @relation(fields: [executionBatchId], references: [id], onDelete: Cascade)
+
+  recipeStepId     Int
+  recipeStep       RecipeStep @relation(fields: [recipeStepId], references: [id])
+
+  stepIngredientId Int
+  stepIngredient   StepIngredient @relation(fields: [stepIngredientId], references: [id])
+
+  ingredientId     Int
+  ingredient       Ingredient @relation(fields: [ingredientId], references: [id])
+  binNumber String?
+
+  qrId             String @unique
+
+  batchSequence Int
+
+  plcIngredientIndex Int
+
+  quantity         Float
+  tolerance        Float
+
+  status           IngredientExecutionStatus @default(PENDING)
+
+  scannedAt        DateTime?
+  completedAt      DateTime?
+
+  createdAt        DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([executionBatchId])
+  @@index([ingredientId])
+  @@index([qrId])
 }

@@ -136,7 +136,7 @@ export default function StepList({
               <div className="space-y-2">
                 {s.ingredients.map((ing: any) => (
                   <div key={ing.id} className="grid grid-cols-12 gap-2">
-                    <div className="col-span-5">
+                    <div className="col-span-4">
                       <Label className="sr-only">Ingredient Code</Label>
                       <Select
                         value={ing.name}
@@ -178,7 +178,7 @@ export default function StepList({
                       </Select>
                     </div>
 
-                    <div className="col-span-3">
+                    <div className="col-span-2  ">
                       <Label className="sr-only">Quantity</Label>
                       <Input
                         type="number"
@@ -188,6 +188,22 @@ export default function StepList({
                         onChange={(e) =>
                           onChangeIngredient(s.id, ing.id, {
                             quantity: e.target.value,
+                          })
+                        }
+                        disabled={disabled}
+                      />
+                    </div>
+
+                    <div className="col-span-2">
+                      <Label className="sr-only">Tolerance</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="Tolerance"
+                        value={ing.tolerance ? String(ing.tolerance) : ''}
+                        onChange={(e) =>
+                          onChangeIngredient(s.id, ing.id, {
+                            tolerance: e.target.value,
                           })
                         }
                         disabled={disabled}
