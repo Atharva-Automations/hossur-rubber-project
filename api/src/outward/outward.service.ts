@@ -91,6 +91,7 @@ export class OutwardService {
       });
 
       // 5. Create outward entry
+      const numBagsIssued = dto.selectedQrIds?.length || 0;
       const outward = await tx.outwardEntry.create({
         data: {
           materialName: inward.materialName, // canonical name
@@ -102,8 +103,9 @@ export class OutwardService {
             dto.remarks ??
             `Issued from ${inward.supplierName} - ${inward.bagWeight}${inward.unit} bags`,
           status: 'Pending',
+          bagsIssued: numBagsIssued,
           qrScanStatus: {
-            totalBags: dto.selectedQrIds?.length || null,
+            totalBags: numBagsIssued,
             scannedBags: 0,
           },
         },
@@ -209,27 +211,24 @@ export class OutwardService {
       });
       console.log('✅ QR state updated to ISSUED');
 
-      // 6. Count total bags available for this outward (all CREATED bags from same material/supplier)
-      const totalBagsAvailable = await tx.inwardQrCode.count({
-        where: {
-          inward: {
-            materialName: outward.materialName,
-          },
-          state: QrState.CREATED,
-        },
-      });
-
-      // 7. Count already scanned bags for this outward
+      // 7. Count already scanned bags for this outward (now includes the one we just scanned)
       console.log('🔢 Counting scanned bags...');
       const scannedBags = await tx.inwardQrCode.count({
         where: { outwardId, state: QrState.ISSUED },
       });
       console.log(`📊 Scan count: ${scannedBags}/${outward.bagsIssued}`);
 
-      // 8. Update outward scan progress
+      // 8. Determine status based on whether all bags are scanned
+      // Only mark as Completed if all bags have been scanned
+      const totalBagsToScan = outward.bagsIssued || 0;
       const currentStatus =
-        scannedBags >= outward.bagsIssued! ? 'Completed' : 'Pending';
+        totalBagsToScan > 0 && scannedBags >= totalBagsToScan
+          ? 'Completed'
+          : 'Pending';
       console.log('🔄 Updating outward status to:', currentStatus);
+      console.log(
+        `📊 Total bags to scan: ${totalBagsToScan}, Scanned so far: ${scannedBags}`
+      );
 
       await tx.outwardEntry.update({
         where: { id: outwardId },

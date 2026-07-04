@@ -8,7 +8,6 @@ import { useRouter } from 'next/navigation';
 
 import { Card, Header, PageContainer, Section } from '@/components/global';
 import { Button } from '@/components/ui/button';
-import { toast } from '@/components/ui/use-toast';
 import { StatsGrid } from '@/components/global';
 import { KpiCard } from '@/components/ui/kpi-card';
 import ProductionScanModal from './components/ProductionScanModal';
@@ -45,7 +44,6 @@ export default function OutwardPage() {
 
   const [openDeleteConfirm, setOpenDeleteConfirm] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState<Outward | null>(null);
-  const [isClosingBins, setIsClosingBins] = useState(false);
 
   // Handle scanned QR from global listener
   const handleScanDetected = useCallback(
@@ -351,35 +349,6 @@ export default function OutwardPage() {
             onClick={() => setScanOpen(true)}
           >
             Production Scan
-          </Button>
-
-          <Button
-            className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white"
-            onClick={async () => {
-              try {
-                setIsClosingBins(true);
-                await api.post('/plc/close-bins');
-                toast({
-                  title: 'Bins closed',
-                  description:
-                    'All bins signalled to close (d540-d574 set to 1)',
-                });
-              } catch (err: any) {
-                console.error('Error closing bins', err);
-                toast({
-                  title: 'Error',
-                  description:
-                    err?.response?.data?.message ||
-                    err?.message ||
-                    'Failed to close bins',
-                });
-              } finally {
-                setIsClosingBins(false);
-              }
-            }}
-            disabled={isClosingBins}
-          >
-            Close All Bins
           </Button>
 
           <Link href="/outward/add">

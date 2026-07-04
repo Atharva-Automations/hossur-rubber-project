@@ -1,7 +1,7 @@
 'use client';
 
 import api from '@/lib/api';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Input } from '@/components/ui/input';
@@ -29,12 +29,17 @@ export default function ScanQrModal({
   const [totalBags, setTotalBags] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const qc = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     console.log('🔑 KEY PRESSED:', e.key);
     if (e.key === 'Enter' && !loading) {
       console.log('⏎ ENTER key detected - triggering scan');
       handleScan();
+    }
+    // Prevent dialog from closing on Escape while scanning
+    if (e.key === 'Escape' && loading) {
+      e.preventDefault();
     }
   };
 
@@ -95,11 +100,17 @@ export default function ScanQrModal({
         });
       }
 
+      // Clear input and keep focus for next scan
+      setQrInput('');
+
+      // Re-focus input immediately for continuous scanning
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+
+      // Only close modal if all bags are scanned
       if (status === 'Completed') {
-        setQrInput('');
         setTimeout(() => onClose(false), 1500);
-      } else {
-        setQrInput('');
       }
     } catch (error: unknown) {
       console.error('❌ API CALL FAILED:', error);
@@ -152,6 +163,11 @@ export default function ScanQrModal({
         description: userMessage,
         variant: 'destructive',
       });
+
+      // Re-focus input after error as well
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
     } finally {
       console.log('🏁 Scan operation completed');
       console.log('========== END QR SCAN ==========\n');
@@ -159,8 +175,16 @@ export default function ScanQrModal({
     }
   };
 
+  const handleDialogOpenChange = (newOpen: boolean) => {
+    // Don't allow closing if we're in the middle of scanning or haven't scanned all bags yet
+    if (!newOpen && scannedCount < (totalBags ?? 0) && scannedCount > 0) {
+      return; // Prevent closing if scanning is in progress
+    }
+    onClose(newOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="sm:max-w-md bg-white rounded-lg shadow-lg border border-gray-200">
         <DialogHeader>
           <DialogTitle>📷 Scan QR Code</DialogTitle>
@@ -171,6 +195,7 @@ export default function ScanQrModal({
             Enter or scan the QR code printed on the material bag.
           </p>
           <Input
+            ref={inputRef}
             placeholder="Enter QR ID (e.g., INW-00001-0001)"
             value={qrInput}
             onChange={(e) => {
@@ -203,7 +228,11 @@ export default function ScanQrModal({
         </div>
 
         <DialogFooter className="flex justify-end gap-3 mt-3">
-          <Button variant="outline" onClick={() => onClose(false)}>
+          <Button
+            variant="outline"
+            onClick={() => onClose(false)}
+            disabled={scannedCount > 0 && scannedCount < (totalBags ?? 0)}
+          >
             Close
           </Button>
           <Button onClick={handleScan} disabled={loading}>

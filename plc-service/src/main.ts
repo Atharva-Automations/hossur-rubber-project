@@ -11,7 +11,7 @@ async function bootstrap() {
 
   const plcService = new PlcService();
   await plcService.start();
-  await plcService.setBinLoading(2);
+  // await plcService.setBinLoading(31);
 
   const scannerService = new ScannerService(plcService);
   await scannerService.start();

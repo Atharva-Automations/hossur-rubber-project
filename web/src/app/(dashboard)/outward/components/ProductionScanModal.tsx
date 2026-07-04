@@ -105,7 +105,9 @@ export default function ProductionScanModal({
               disabled={!qrId || isPending}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {isPending ? 'Scanning...' : 'Scan'}
+              <span suppressHydrationWarning>
+                {isPending ? 'Scanning...' : 'Scan'}
+              </span>
             </Button>
           </div>
         </div>

@@ -151,8 +151,8 @@ export class BinService {
   // --- Utility Methods ---
 
   async getAvailableBins() {
-    // assuming fixed 25 bins labeled "B1" to "B25"
-    const allBins = Array.from({ length: 25 }, (_, i) => `B${i + 1}`);
+    // assuming fixed 31 bins labeled "B1" to "B31"
+    const allBins = Array.from({ length: 31 }, (_, i) => `B${i + 1}`);
     const assigned = await this.prisma.binAssignment.findMany({
       select: { binNumber: true },
     });
@@ -178,7 +178,7 @@ export class BinService {
   }
 
   async getBinStatus() {
-    const allBins = Array.from({ length: 25 }, (_, i) => `B${i + 1}`);
+    const allBins = Array.from({ length: 31 }, (_, i) => `B${i + 1}`);
 
     const assigned = await this.prisma.binAssignment.findMany({
       include: { ingredient: true },
