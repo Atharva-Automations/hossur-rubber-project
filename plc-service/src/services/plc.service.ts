@@ -64,6 +64,17 @@ export class PlcService {
 
     return res.data;
   }
+
+  async readDWord(address: number): Promise<number> {
+    this.ensureConnected();
+
+    const result = await this.client.readHoldingRegisters(address, 2);
+
+    const low = result.data[0];
+    const high = result.data[1];
+
+    return high * 65536 + low;
+  }
   // --------------------------------------------------------------------------
 
   // --------------------------------------------------------------------------
@@ -84,6 +95,50 @@ export class PlcService {
       address,
       value,
     };
+  }
+
+  async writeWord(address: number, value: number) {
+    return this.writeRegister(address, value);
+  }
+
+  async writeWords(address: number, values: number[]) {
+    this.ensureConnected();
+
+    await this.client.writeRegisters(address, values);
+
+    return true;
+  }
+
+  async writeFloat(address: number, value: number) {
+    const buffer = Buffer.alloc(4);
+
+    buffer.writeFloatBE(value);
+
+    const high = buffer.readUInt16BE(0);
+    const low = buffer.readUInt16BE(2);
+
+    await this.writeWords(address, [low, high]);
+  }
+
+  async writeDWord(address: number, value: number) {
+    const high = (value >> 16) & 0xffff;
+    const low = value & 0xffff;
+
+    await this.writeWords(address, [low, high]);
+  }
+
+  async writeAscii(address: number, text: string, words: number) {
+    const buffer = Buffer.alloc(words * 2);
+
+    buffer.write(text);
+
+    const registers: number[] = [];
+
+    for (let i = 0; i < words; i++) {
+      registers.push(buffer.readUInt16BE(i * 2));
+    }
+
+    await this.writeWords(address, registers);
   }
   // --------------------------------------------------------------------------
 

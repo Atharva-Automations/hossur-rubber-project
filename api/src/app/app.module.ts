@@ -9,6 +9,8 @@ import { RecipeModule } from '../recipe/recipe.module';
 import { BatchModule } from '../batch/batch.module';
 import { PrinterModule } from '../printer/printer.module';
 import { ExecutionModule } from '../execution/execution.module';
+import { ScannerModule } from '../scanner/scanner.module';
+import { WeighingModule } from '../weighing/weighing.module';
 // import { PlcModule } from '../plc/plc.module';
 
 @Module({
@@ -24,6 +26,8 @@ import { ExecutionModule } from '../execution/execution.module';
     // PlcModule,
     PrinterModule,
     ExecutionModule,
+    ScannerModule,
+    WeighingModule,
   ],
 })
 export class AppModule {}

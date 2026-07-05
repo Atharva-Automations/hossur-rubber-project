@@ -3,12 +3,16 @@ import axios from 'axios';
 import { PlcService } from './plc.service';
 import { PRODUCTION_REGISTERS } from '../config/registers/production.registers';
 import { PRODUCTION_PLC } from '../config/production.plc';
+import { WeighingPlcService } from './weighing-plc.service';
 
 const M_OFFSET = PRODUCTION_PLC.offsets.M;
 const D_OFFSET = PRODUCTION_PLC.offsets.D;
 
 export class ScannerService {
-  constructor(private readonly plcService: PlcService) {}
+  constructor(
+    private readonly plcService: PlcService,
+    private readonly weighingPlcService: WeighingPlcService
+  ) {}
 
   async start(): Promise<void> {
     console.log('📷 Scanner Service Started');
@@ -82,13 +86,18 @@ export class ScannerService {
     return qrCode;
   }
 
+  async handleQr(qrId: string) {
+    const response = await axios.post('http://localhost:3000/scanner/scan', {
+      qrId,
+    });
+
+    await this.weighingPlcService.process(response.data.payload);
+  }
+
   private async sendQRCodeToBackend(qrCode: string) {
-    const response = await axios.post(
-      'http://localhost:3000/production/scan-qr',
-      {
-        qrCode,
-      }
-    );
+    const response = await axios.post('http://localhost:3000/scanner/scan', {
+      qrId: qrCode,
+    });
 
     return response.data;
   }
