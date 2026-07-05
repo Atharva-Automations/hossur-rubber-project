@@ -26,6 +26,7 @@ const menu = [
   { label: 'Ingredients', href: '/ingredients', icon: Layers },
   { label: 'Bins', href: '/bins', icon: Boxes },
   { label: 'Recipes', href: '/recipes', icon: BookOpen },
+  { label: 'Weighing', href: '/weighing', icon: BookOpen },
   { label: 'Process Tracking', href: '/process', icon: LineChart },
   { label: 'QC', href: '/qc', icon: CheckSquare },
   { label: 'Reports', href: '/reports', icon: FileText },

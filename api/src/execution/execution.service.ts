@@ -98,4 +98,69 @@ export class ExecutionService {
       };
     });
   }
+
+  async findExecutionQrs(id: number) {
+    const execution = await this.prisma.execution.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        id: true,
+        executionCode: true,
+        totalBatches: true,
+
+        batches: {
+          orderBy: {
+            batchNumber: 'asc',
+          },
+          select: {
+            id: true,
+            batchNumber: true,
+
+            ingredients: {
+              orderBy: {
+                plcIngredientIndex: 'asc',
+              },
+              select: {
+                id: true,
+                qrId: true,
+                quantity: true,
+                tolerance: true,
+
+                ingredient: {
+                  select: {
+                    name: true,
+                    ingredientCode: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!execution) {
+      throw new NotFoundException('Execution not found.');
+    }
+
+    return {
+      id: execution.id,
+      executionCode: execution.executionCode,
+      totalBatches: execution.totalBatches,
+
+      batches: execution.batches.map((batch) => ({
+        id: batch.id,
+        batchNumber: batch.batchNumber,
+
+        ingredients: batch.ingredients.map((ingredient) => ({
+          id: ingredient.id,
+          qrId: ingredient.qrId,
+          quantity: ingredient.quantity,
+          tolerance: ingredient.tolerance,
+          ingredientCode: ingredient.ingredient.ingredientCode,
+        })),
+      })),
+    };
+  }
 }

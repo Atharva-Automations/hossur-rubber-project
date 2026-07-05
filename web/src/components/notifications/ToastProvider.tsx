@@ -7,8 +7,15 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import ToastContainer from './ToastContainer';
+
+const generateId = () => {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+};
 
 export type Notification = {
   id: string;
@@ -50,7 +57,7 @@ export default function ToastProvider({
 
   const notify = useCallback(
     (n: Omit<Notification, 'id' | 'createdAt'>) => {
-      const id = uuidv4();
+      const id = generateId();
       const toast: Notification = { ...n, id, createdAt: Date.now() };
       setNotifications((s) => [toast, ...s]);
       // auto-dismiss after 5s

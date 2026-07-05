@@ -156,4 +156,30 @@ export class WeighingService {
       };
     });
   }
+
+  async findAllExecutions() {
+    const executions = await this.prisma.execution.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+      include: {
+        recipe: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    return executions.map((execution) => ({
+      id: execution.id,
+      executionCode: execution.executionCode,
+      recipeId: execution.recipeId,
+      recipeName: execution.recipe.name,
+      totalBatches: execution.totalBatches,
+      status: execution.status,
+      createdAt: execution.createdAt,
+    }));
+  }
 }

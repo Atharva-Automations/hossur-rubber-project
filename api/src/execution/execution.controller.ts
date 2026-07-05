@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Post } from '@nestjs/common';
 import { ExecutionService } from './execution.service';
 import { CreateExecutionDto } from './dto/create-execution.dto';
 
@@ -9,5 +9,10 @@ export class ExecutionController {
   @Post()
   create(@Body() dto: CreateExecutionDto) {
     return this.executionService.create(dto);
+  }
+
+  @Get(':id/qrs')
+  findExecutionQrs(@Param('id', ParseIntPipe) id: number) {
+    return this.executionService.findExecutionQrs(id);
   }
 }
