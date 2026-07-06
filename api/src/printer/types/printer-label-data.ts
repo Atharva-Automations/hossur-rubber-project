@@ -12,9 +12,13 @@ export interface PrinterLabelData {
 
 export interface WeighingLabelData {
   qrId: string;
+  recipeCode: string;
   executionCode: string;
   batchNumber: number;
   ingredientCode: string;
+  binNumber: string;
   quantity: number;
   tolerance: number;
+  julianDate: string;
+  mode: 'BULK' | 'SEQUENTIAL';
 }

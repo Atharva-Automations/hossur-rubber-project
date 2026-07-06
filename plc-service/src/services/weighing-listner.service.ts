@@ -39,7 +39,12 @@ export class WeighingListenerService {
             weight: actualWeight,
           });
 
-          await this.plcService.writeCoil(2051, false);
+          await this.weighingPlcService.closeCurrentBin();
+
+          await this.plcService.writeCoil(
+            WEIGHING_REGISTERS.WEIGHING_DONE_BIT + WEIGHING_REGISTERS.M_OFFSET,
+            false
+          );
 
           this.weighingPlcService.clearCurrentQr();
 

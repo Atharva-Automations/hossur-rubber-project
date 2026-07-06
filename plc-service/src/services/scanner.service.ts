@@ -14,22 +14,38 @@ export class ScannerService {
     private readonly weighingPlcService: WeighingPlcService
   ) {}
 
+  private processing = false;
+
   async start(): Promise<void> {
     console.log('📷 Scanner Service Started');
 
     setInterval(async () => {
+      if (this.processing) {
+        return;
+      }
+
+      this.processing = true;
+
       try {
         const qrCode = await this.readScannedQRCode();
 
         if (qrCode) {
           const result = await this.sendQRCodeToBackend(qrCode);
 
-          await this.weighingPlcService.process(result.payload);
+          if (result.payload) {
+            await this.weighingPlcService.process(result.payload);
+          }
+
+          await this.triggerScanSuccess();
 
           console.log(result);
         }
       } catch (error) {
         console.error('Scanner Error:', error);
+
+        await this.triggerScanFailure();
+      } finally {
+        this.processing = false;
       }
     }, 200);
   }
@@ -92,6 +108,34 @@ export class ScannerService {
     });
 
     await this.weighingPlcService.process(response.data.payload);
+  }
+
+  private async triggerScanSuccess() {
+    await this.plcService.writeCoil(
+      M_OFFSET + PRODUCTION_REGISTERS.SCANNER.SUCCESS,
+      true
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    await this.plcService.writeCoil(
+      M_OFFSET + PRODUCTION_REGISTERS.SCANNER.SUCCESS,
+      false
+    );
+  }
+
+  private async triggerScanFailure() {
+    await this.plcService.writeCoil(
+      M_OFFSET + PRODUCTION_REGISTERS.SCANNER.FAILURE,
+      true
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    await this.plcService.writeCoil(
+      M_OFFSET + PRODUCTION_REGISTERS.SCANNER.FAILURE,
+      false
+    );
   }
 
   private async sendQRCodeToBackend(qrCode: string) {

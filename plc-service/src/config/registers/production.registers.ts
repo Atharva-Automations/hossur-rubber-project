@@ -1,6 +1,9 @@
 export const PRODUCTION_REGISTERS = {
   SCANNER: {
     TRIGGER: 0, // M0
+    FAILURE: 1,
+    SUCCESS: 2,
+
     QR_START: 350,
     QR_LENGTH: 50,
   },

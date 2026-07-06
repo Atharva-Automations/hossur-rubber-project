@@ -18,24 +18,20 @@ export class WeighingPrinterService {
         where: {
           qrId,
         },
-        select: {
-          qrId: true,
-          quantity: true,
-          tolerance: true,
-
+        include: {
           ingredient: {
-            select: {
-              ingredientCode: true,
+            include: {
+              bins: {
+                take: 1,
+              },
             },
           },
 
           executionBatch: {
-            select: {
-              batchNumber: true,
-
+            include: {
               execution: {
-                select: {
-                  executionCode: true,
+                include: {
+                  recipe: true,
                 },
               },
             },
@@ -50,15 +46,25 @@ export class WeighingPrinterService {
     return {
       qrId: executionIngredient.qrId,
 
+      recipeCode: executionIngredient.executionBatch.execution.recipe.recipeCode,
+
       executionCode: executionIngredient.executionBatch.execution.executionCode,
 
       batchNumber: executionIngredient.executionBatch.batchNumber,
 
       ingredientCode: executionIngredient.ingredient.ingredientCode,
 
+      binNumber: executionIngredient.ingredient.bins[0]?.binNumber ?? '-',
+
       quantity: executionIngredient.quantity,
 
+      // unit: executionIngredient.ingredient.unit,
+
       tolerance: executionIngredient.tolerance,
+
+      julianDate: this.getJulianDate(new Date()),
+
+      mode: executionIngredient.executionBatch.execution.mode,
     };
   }
 
@@ -77,5 +83,16 @@ export class WeighingPrinterService {
       await this.printLabel(qr.qrId);
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
+  }
+
+  private getJulianDate(date: Date): string {
+    const start = new Date(Date.UTC(date.getUTCFullYear(), 0, 0));
+    const diff = date.getTime() - start.getTime();
+    const oneDay = 1000 * 60 * 60 * 24;
+    const dayOfYear = Math.floor(diff / oneDay);
+
+    return `${String(date.getUTCFullYear()).slice(-2)}${String(
+      dayOfYear
+    ).padStart(3, '0')}`;
   }
 }

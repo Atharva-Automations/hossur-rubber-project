@@ -3,6 +3,7 @@ import { WEIGHING_REGISTERS } from '../config/registers/weighing.registers';
 
 export class WeighingPlcService {
   private currentQrId: string | null = null;
+  private currentBinNumber: number | null = null;
 
   constructor(private readonly plcService: PlcService) {}
 
@@ -89,6 +90,7 @@ export class WeighingPlcService {
 
     // Open Bin
     await this.plcService.writeWord(unloadingRegister, 2);
+    this.currentBinNumber = current.binNumber;
 
     // Current Ingredient Number
     await this.plcService.writeWord(
@@ -105,5 +107,22 @@ export class WeighingPlcService {
     console.log(
       `Ingredient ${current.ingredientNumber} written. Bin ${current.binNumber} opened.`
     );
+  }
+
+  async closeCurrentBin() {
+    if (this.currentBinNumber == null) {
+      return;
+    }
+
+    const unloadingRegister =
+      WEIGHING_REGISTERS.BIN_UNLOADING[this.currentBinNumber];
+
+    if (!unloadingRegister) {
+      return;
+    }
+
+    await this.plcService.writeWord(unloadingRegister, 0);
+
+    this.currentBinNumber = null;
   }
 }
