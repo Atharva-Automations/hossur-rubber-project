@@ -1,5 +1,5 @@
 import { Body, Controller, Post, Get } from '@nestjs/common';
-import { ScanQrDto } from '../weighing/dto/scan-qr.dto';
+import { ScanQrDto } from './dto/scan-qr.dto';
 import { WeighingService } from './weighing.service';
 import { CompleteWeighingDto } from './dto/complete-weighing.dto';
 

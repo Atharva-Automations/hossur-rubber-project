@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ProductionService } from '../production/production.service';
-import { WeighingService } from '../weighing/weighing.service';
+import { WeighingService } from '../bulk-weighing/weighing.service';
 
 @Injectable()
 export class ScannerService {

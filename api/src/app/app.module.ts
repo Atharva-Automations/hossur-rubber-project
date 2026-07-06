@@ -10,7 +10,7 @@ import { BatchModule } from '../batch/batch.module';
 import { PrinterModule } from '../printer/printer.module';
 import { ExecutionModule } from '../execution/execution.module';
 import { ScannerModule } from '../scanner/scanner.module';
-import { WeighingModule } from '../weighing/weighing.module';
+import { WeighingModule } from '../bulk-weighing/weighing.module';
 // import { PlcModule } from '../plc/plc.module';
 
 @Module({

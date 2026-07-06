@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { IngredientExecutionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ScanQrDto } from '../weighing/dto/scan-qr.dto';
+import { ScanQrDto } from './dto/scan-qr.dto';
 import { CompleteWeighingDto } from './dto/complete-weighing.dto';
 import { buildPlcPayload } from './utils/plc-payload.builder';
 

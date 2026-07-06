@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ScannerController } from './scanner.controller';
 import { ScannerService } from './scanner.service';
 import { ProductionModule } from '../production/production.module';
-import { WeighingModule } from '../weighing/weighing.module';
+import { WeighingModule } from '../bulk-weighing/weighing.module';
 
 @Module({
   imports: [ProductionModule, WeighingModule],
