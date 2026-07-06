@@ -41,7 +41,7 @@ export default function QrPreviewModal({ open, onClose, executionId }: any) {
   const handlePrintSingle = async (qrId: string) => {
     try {
       setPrinting(true);
-      await api.post('/printer/print', { qrId });
+      await api.post('/printer/weighing/print', { qrId });
       toast.success('Label printed successfully');
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Print failed');
@@ -57,7 +57,7 @@ export default function QrPreviewModal({ open, onClose, executionId }: any) {
     try {
       setPrinting(true);
 
-      await api.post('/printer/print-batch', {
+      await api.post('/printer/weighing/print-batch', {
         qrCodes: currentBatch.ingredients.map((ingredient: any) => ({
           qrId: ingredient.qrId,
         })),
@@ -85,7 +85,7 @@ export default function QrPreviewModal({ open, onClose, executionId }: any) {
       });
 
       // Send batch request to backend
-      await api.post('/printer/print-batch', {
+      await api.post('/printer/weighing/print-batch', {
         qrCodes: execution?.batches?.flatMap((batch: any) =>
           batch.ingredients.map((ingredient: any) => ({
             qrId: ingredient.qrId,

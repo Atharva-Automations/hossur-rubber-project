@@ -2,7 +2,7 @@ export const PRODUCTION_REGISTERS = {
   SCANNER: {
     TRIGGER: 0, // M0
     QR_START: 350,
-    QR_LENGTH: 10,
+    QR_LENGTH: 50,
   },
 
   BIN_LOADING: {

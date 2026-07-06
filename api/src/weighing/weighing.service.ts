@@ -14,6 +14,7 @@ export class WeighingService {
   constructor(private readonly prisma: PrismaService) {}
 
   async scan(dto: ScanQrDto) {
+    console.log('QR Received:', JSON.stringify(dto.qrId));
     return this.prisma.$transaction(async (tx) => {
       const executionIngredient = await tx.executionIngredient.findUnique({
         where: {
@@ -43,6 +44,7 @@ export class WeighingService {
           },
         },
       });
+      console.log(executionIngredient);
 
       if (!executionIngredient) {
         throw new NotFoundException('Invalid QR Code.');

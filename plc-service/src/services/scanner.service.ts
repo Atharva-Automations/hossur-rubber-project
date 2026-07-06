@@ -24,7 +24,7 @@ export class ScannerService {
         if (qrCode) {
           const result = await this.sendQRCodeToBackend(qrCode);
 
-          await this.plcService.setBinLoading(result.binNumber);
+          await this.weighingPlcService.process(result.payload);
 
           console.log(result);
         }
@@ -74,10 +74,10 @@ export class ScannerService {
     }
 
     const registers = await this.readQRCodeRegisters();
+    // console.log('Scanned QR Code Registers:', registers);
 
     const qrCode = this.decodeQRCode(registers);
 
-    // Tell PLC that scan has been consumed
     await this.plcService.writeCoil(
       PRODUCTION_PLC.offsets.M + PRODUCTION_REGISTERS.SCANNER.TRIGGER,
       false
@@ -98,6 +98,8 @@ export class ScannerService {
     const response = await axios.post('http://localhost:3000/scanner/scan', {
       qrId: qrCode,
     });
+
+    console.log(response.data);
 
     return response.data;
   }
