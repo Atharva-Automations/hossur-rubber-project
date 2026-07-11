@@ -11,6 +11,8 @@ export class WeighingPlcService {
     this.currentQrId = payload.currentIngredient.qrId;
     console.log('Received weighing payload');
 
+    await this.closeCurrentBin();
+
     if (payload.firstScan) {
       console.log('Writing recipe...');
       await this.writeRecipe(payload.recipe);

@@ -111,17 +111,21 @@ export class ScannerService {
   }
 
   private async triggerScanSuccess() {
+    console.log('turning m2 on');
     await this.plcService.writeCoil(
       M_OFFSET + PRODUCTION_REGISTERS.SCANNER.SUCCESS,
       true
     );
 
+    console.log('m2 is on');
+
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    await this.plcService.writeCoil(
-      M_OFFSET + PRODUCTION_REGISTERS.SCANNER.SUCCESS,
-      false
-    );
+    // await this.plcService.writeCoil(
+    //   M_OFFSET + PRODUCTION_REGISTERS.SCANNER.SUCCESS,
+    //   false
+    // );
+    // console.log('turning m2 off');
   }
 
   private async triggerScanFailure() {

@@ -70,7 +70,7 @@ export default function StepList({
                 />
               </div>
 
-              <div>
+              {/* <div>
                 <Label>Pressure (bar)</Label>
                 <Input
                   type="number"
@@ -82,9 +82,9 @@ export default function StepList({
                   }
                   disabled={disabled}
                 />
-              </div>
+              </div> */}
 
-              <div>
+              {/* <div>
                 <Label>Temperature (°C)</Label>
                 <Input
                   type="number"
@@ -95,9 +95,9 @@ export default function StepList({
                   }
                   disabled={disabled}
                 />
-              </div>
+              </div> */}
 
-              <div>
+              {/* <div>
                 <Label>RPM</Label>
                 <Input
                   type="number"
@@ -108,7 +108,7 @@ export default function StepList({
                   }
                   disabled={disabled}
                 />
-              </div>
+              </div> */}
 
               <div className="flex items-end justify-end gap-2">
                 <Button
@@ -210,7 +210,7 @@ export default function StepList({
                       />
                     </div>
 
-                    <div className="col-span-2">
+                    {/* <div className="col-span-2">
                       <Label className="sr-only">Unit</Label>
                       <Select
                         value={ing.unit}
@@ -229,7 +229,7 @@ export default function StepList({
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
+                    </div> */}
 
                     <div className="col-span-2 flex items-center justify-end">
                       <Button

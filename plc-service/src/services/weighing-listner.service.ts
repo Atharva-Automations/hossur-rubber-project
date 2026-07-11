@@ -39,7 +39,9 @@ export class WeighingListenerService {
             weight: actualWeight,
           });
 
-          await this.weighingPlcService.closeCurrentBin();
+          // await new Promise((resolve) => setTimeout(resolve, 10000));
+
+          // await this.weighingPlcService.closeCurrentBin();
 
           await this.plcService.writeCoil(
             WEIGHING_REGISTERS.WEIGHING_DONE_BIT + WEIGHING_REGISTERS.M_OFFSET,

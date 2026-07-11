@@ -546,7 +546,7 @@ export default function RecipeAddPage() {
                                 <span>
                                   <b>Timer:</b> {s.timerSeconds || '—'}s
                                 </span>
-                                <span>
+                                {/* <span>
                                   <b>Pressure:</b> {s.pressure || '—'} bar
                                 </span>
                                 <span>
@@ -554,7 +554,7 @@ export default function RecipeAddPage() {
                                 </span>
                                 <span>
                                   <b>RPM:</b> {s.rpm || '—'}
-                                </span>
+                                </span> */}
                                 <span>
                                   <b>Ingredients:</b> {s.ingredients.length}
                                 </span>
