@@ -10,11 +10,8 @@ import {
   BatchProcessStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  CompleteStageDto,
-  RecipeWrittenDto,
-  ScanKneaderDto,
-} from './dto/scan-kneader.dto';
+import { CompleteStageDto, ScanKneaderDto } from './dto/scan-kneader.dto';
+import { RecipeWrittenDto } from './dto/recipe-written.dto';
 import { KneaderResult } from './types/kneader-response.type';
 
 @Injectable()
@@ -23,62 +20,61 @@ export class KneaderService {
 
   async scan(dto: ScanKneaderDto) {
     return this.prisma.$transaction(async (tx) => {
-      const executionIngredient =
-        await tx.executionIngredient.findUnique({
-          where: {
-            qrId: dto.qrId,
+      const executionIngredient = await tx.executionIngredient.findUnique({
+        where: {
+          qrId: dto.qrId,
+        },
+        include: {
+          ingredient: {
+            include: {
+              bins: true,
+            },
           },
-          include: {
-            ingredient: {
-              include: {
-                bins: true,
-              },
+
+          recipeStep: {
+            include: {
+              ingredients: true,
             },
+          },
 
-            recipeStep: {
-              include: {
-                ingredients: true,
-              },
-            },
+          executionBatch: {
+            include: {
+              kneaderExecution: true,
 
-            executionBatch: {
-              include: {
-                kneaderExecution: true,
-
-                execution: {
-                  include: {
-                    recipe: {
-                      include: {
-                        steps: {
-                          include: {
-                            ingredients: {
-                              include: {
-                                ingredient: true,
-                              },
+              execution: {
+                include: {
+                  recipe: {
+                    include: {
+                      steps: {
+                        include: {
+                          ingredients: {
+                            include: {
+                              ingredient: true,
                             },
                           },
-                          orderBy: {
-                            sequenceNumber: 'asc',
-                          },
+                        },
+                        orderBy: {
+                          sequenceNumber: 'asc',
                         },
                       },
                     },
                   },
                 },
+              },
 
-                ingredients: {
-                  include: {
-                    ingredient: true,
-                    recipeStep: true,
-                  },
-                  orderBy: {
-                    plcIngredientIndex: 'asc',
-                  },
+              ingredients: {
+                include: {
+                  ingredient: true,
+                  recipeStep: true,
+                },
+                orderBy: {
+                  plcIngredientIndex: 'asc',
                 },
               },
             },
           },
-        });
+        },
+      });
 
       if (!executionIngredient) {
         throw new NotFoundException('Invalid QR Code.');
@@ -177,6 +173,8 @@ export class KneaderService {
 
       return {
         result: KneaderResult.VALID,
+
+        executionBatchId: batch.id,
 
         writeRecipe: !kneaderExecution.recipeWritten,
 

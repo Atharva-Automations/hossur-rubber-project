@@ -10,7 +10,3 @@ export class CompleteStageDto {
   executionBatchId!: number;
 }
 
-export class RecipeWrittenDto {
-  @IsInt()
-  executionBatchId!: number;
-}

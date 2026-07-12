@@ -57,6 +57,14 @@ export class PlcService {
     }));
   }
 
+  async readWords(address: number, count: number): Promise<number[]> {
+    this.ensureConnected();
+
+    const res = await this.client.readHoldingRegisters(address, count);
+
+    return res.data;
+  }
+
   async readCoils(start: number, count: number) {
     this.ensureConnected();
 

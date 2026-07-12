@@ -1,6 +1,7 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { KneaderService } from './kneader.service';
-import { CompleteStageDto, RecipeWrittenDto, ScanKneaderDto } from './dto/scan-kneader.dto';
+import { CompleteStageDto, ScanKneaderDto } from './dto/scan-kneader.dto';
+import { RecipeWrittenDto } from './dto/recipe-written.dto';
 
 @Controller('kneader')
 export class KneaderController {
