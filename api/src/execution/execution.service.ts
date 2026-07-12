@@ -1,5 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ExecutionStatus, BatchExecutionStatus } from '@prisma/client';
+import {
+  ExecutionStatus,
+  BatchExecutionStatus,
+  BatchProcessStatus,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExecutionDto } from './dto/create-execution.dto';
 import { generateExecutionCode } from '../common/utils/code-generator';
@@ -61,7 +65,14 @@ export class ExecutionService {
             executionId: execution.id,
             batchNumber: i,
             status: BatchExecutionStatus.PENDING,
-            isActive: i === 1,
+            kneaderStatus: BatchProcessStatus.PENDING,
+            mixingStatus: BatchProcessStatus.PENDING,
+          },
+        });
+
+        await tx.kneaderExecution.create({
+          data: {
+            executionBatchId: batch.id,
           },
         });
 

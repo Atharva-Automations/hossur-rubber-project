@@ -51,24 +51,17 @@ export class WeighingService {
       }
 
       // Reject if ingredient already completed
-      if (executionIngredient.status === IngredientExecutionStatus.COMPLETED) {
+      if (executionIngredient.actualQuantity !== null) {
         throw new BadRequestException('Ingredient already completed.');
       }
 
       const batch = executionIngredient.executionBatch;
 
-      // Only active batch can be scanned
-      if (!batch.isActive) {
-        throw new BadRequestException(
-          'Complete the current batch before scanning another batch.'
-        );
-      }
-
       // Check whether this is the first scan of this batch
       const scannedCount = await tx.executionIngredient.count({
         where: {
           executionBatchId: batch.id,
-          scannedAt: {
+          weighedAt: {
             not: null,
           },
         },
@@ -87,8 +80,8 @@ export class WeighingService {
           id: executionIngredient.id,
         },
         data: {
-          status: IngredientExecutionStatus.SCANNED,
-          scannedAt: new Date(),
+          status: IngredientExecutionStatus.WEIGHED,
+          weighedAt: new Date(),
         },
       });
 
@@ -114,8 +107,8 @@ export class WeighingService {
         throw new NotFoundException('Invalid QR Code.');
       }
 
-      if (executionIngredient.status === IngredientExecutionStatus.COMPLETED) {
-        throw new BadRequestException('Ingredient already completed.');
+      if (executionIngredient.actualQuantity !== null) {
+        throw new BadRequestException('Ingredient already consumed.');
       }
 
       await tx.executionIngredient.update({
@@ -125,7 +118,7 @@ export class WeighingService {
         data: {
           actualQuantity: dto.weight,
           completedAt: new Date(),
-          status: IngredientExecutionStatus.COMPLETED,
+          status: IngredientExecutionStatus.WEIGHED,
         },
       });
 
@@ -133,7 +126,7 @@ export class WeighingService {
         where: {
           executionBatchId: executionIngredient.executionBatchId,
           status: {
-            not: IngredientExecutionStatus.COMPLETED,
+            not: IngredientExecutionStatus.CONSUMED,
           },
         },
       });
@@ -146,7 +139,6 @@ export class WeighingService {
             id: executionIngredient.executionBatchId,
           },
           data: {
-            isActive: false,
             completedAt: new Date(),
           },
         });

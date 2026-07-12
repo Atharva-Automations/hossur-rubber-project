@@ -83,11 +83,32 @@ enum BatchExecutionStatus {
   COMPLETED
 }
 
+enum BatchProcessStatus {
+  PENDING
+  READY
+  RUNNING
+  COMPLETED
+}
+
 enum IngredientExecutionStatus {
   PENDING
-  SCANNED
-  COMPLETED
+  WEIGHED
+  CONSUMED
   CANCELLED
+}
+
+enum MasterBatchStatus {
+  CREATED
+  IN_STOCK
+  CONSUMED
+  SCRAPPED
+}
+
+
+enum KneaderExecutionStatus {
+  READY
+  RUNNING
+  COMPLETED
 }
 
 // ─────────────────────────────────────────────
@@ -176,16 +197,16 @@ model MaterialStock {
 // Ingredient — defines a material-ingredient link
 // ─────────────────────────────────────────────
 model Ingredient {
-  id              Int               @id @default(autoincrement())
-  ingredientCode  String            @unique
-  name            String?
-  type            IngredientType
-  materialName    String
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  bins            BinAssignment[]
-  recipeLinks     StepIngredient[]
-  BatchIngredient BatchIngredient[]
+  id                   Int                   @id @default(autoincrement())
+  ingredientCode       String                @unique
+  name                 String?
+  type                 IngredientType
+  materialName         String
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  bins                 BinAssignment[]
+  recipeLinks          StepIngredient[]
+  BatchIngredient      BatchIngredient[]
   executionIngredients ExecutionIngredient[]
 }
 
@@ -216,9 +237,11 @@ model Recipe {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  steps RecipeStep[]
-  Batch Batch[]
+  steps      RecipeStep[]
+  Batch      Batch[]
   executions Execution[]
+
+  masterBatches MasterBatch[]
 }
 
 // ─────────────────────────────────────────────
@@ -236,8 +259,8 @@ model RecipeStep {
   temperature    Float?
   rpm            Float?
 
-  ingredients StepIngredient[]
-  batchSteps  BatchStep[]
+  ingredients          StepIngredient[]
+  batchSteps           BatchStep[]
   executionIngredients ExecutionIngredient[]
 
   @@index([recipeId])
@@ -254,9 +277,9 @@ model StepIngredient {
   ingredientId Int
   ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
 
-  quantity Float
+  quantity  Float
   tolerance Float
-  unit     String
+  unit      String
 
   executionIngredients ExecutionIngredient[]
 }
@@ -327,15 +350,15 @@ model BatchStep {
 // BatchIngredient — links ingredients to batch steps with quantities
 // ─────────────────────────────────────────────
 model BatchIngredient {
-  id              Int    @id @default(autoincrement())
-  batchStepId     Int
-  ingredientId    Int
-  quantityPerUnit Float // Per single product unit
-  totalQuantity   Float // Total for all units in batch
-  unit            String
-  sequenceInStep  Int    @default(1) // Order in which this ingredient appears in the step
+  id                 Int    @id @default(autoincrement())
+  batchStepId        Int
+  ingredientId       Int
+  quantityPerUnit    Float // Per single product unit
+  totalQuantity      Float // Total for all units in batch
+  unit               String
+  sequenceInStep     Int    @default(1) // Order in which this ingredient appears in the step
   plcIngredientIndex Int
-  tolerance Float
+  tolerance          Float
 
   batchStep      BatchStep          @relation(fields: [batchStepId], references: [id], onDelete: Cascade)
   ingredient     Ingredient         @relation(fields: [ingredientId], references: [id])
@@ -511,79 +534,119 @@ model FinalBatch {
 }
 
 model Execution {
-  id           Int             @id @default(autoincrement())
+  id            Int    @id @default(autoincrement())
   executionCode String @unique
 
-  recipeId     Int
-  recipe       Recipe          @relation(fields: [recipeId], references: [id])
+  recipeId Int
+  recipe   Recipe @relation(fields: [recipeId], references: [id])
 
   mode         ExecutionMode
   totalBatches Int
 
-  status       ExecutionStatus @default(PENDING)
+  status ExecutionStatus @default(PENDING)
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  batches      ExecutionBatch[]
+  batches ExecutionBatch[]
 
   @@index([recipeId])
 }
 
 model ExecutionBatch {
-  id           Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  executionId  Int
-  execution    Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  executionId Int
+  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
 
-  batchNumber  Int
+  batchNumber Int
 
-  status       BatchExecutionStatus @default(PENDING)
+  status BatchExecutionStatus @default(PENDING)
 
-  startedAt    DateTime?
-  completedAt  DateTime?
+  kneaderStatus BatchProcessStatus @default(PENDING)
+  mixingStatus  BatchProcessStatus @default(PENDING)
 
-  ingredients  ExecutionIngredient[]
+  startedAt   DateTime?
+  completedAt DateTime?
 
-  isActive Boolean @default(false)
+  ingredients ExecutionIngredient[]
+
+  masterBatch MasterBatch?
+  kneaderExecution KneaderExecution?
 
   @@unique([executionId, batchNumber])
   @@index([executionId])
 }
 
 model ExecutionIngredient {
-  id               Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   executionBatchId Int
   executionBatch   ExecutionBatch @relation(fields: [executionBatchId], references: [id], onDelete: Cascade)
 
-  recipeStepId     Int
-  recipeStep       RecipeStep @relation(fields: [recipeStepId], references: [id])
+  recipeStepId Int
+  recipeStep   RecipeStep @relation(fields: [recipeStepId], references: [id])
 
   stepIngredientId Int
   stepIngredient   StepIngredient @relation(fields: [stepIngredientId], references: [id])
 
-  ingredientId     Int
-  ingredient       Ingredient @relation(fields: [ingredientId], references: [id])
+  ingredientId Int
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
 
-  qrId             String @unique
+  qrId String @unique
 
   plcIngredientIndex Int
 
-  quantity         Float
-  tolerance        Float
+  quantity  Float
+  tolerance Float
 
-  status           IngredientExecutionStatus @default(PENDING)
+  status IngredientExecutionStatus @default(PENDING)
+  kneaderScanned Boolean @default(false)
 
-  scannedAt        DateTime?
-  completedAt      DateTime?
+  weighedAt   DateTime?
+  completedAt DateTime?
 
   actualQuantity Float?
-  
-  createdAt        DateTime @default(now())
+
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([executionBatchId])
   @@index([ingredientId])
   @@index([qrId])
+}
+
+model MasterBatch {
+  id Int @id @default(autoincrement())
+
+  qrId String @unique
+
+  executionBatchId Int            @unique
+  executionBatch   ExecutionBatch @relation(fields: [executionBatchId], references: [id], onDelete: Cascade)
+
+  recipeId Int
+  recipe   Recipe @relation(fields: [recipeId], references: [id])
+
+  status MasterBatchStatus @default(CREATED)
+
+  createdAt  DateTime  @default(now())
+  consumedAt DateTime?
+
+  @@index([recipeId])
+}
+
+model KneaderExecution {
+  id Int @id @default(autoincrement())
+
+  executionBatchId Int @unique
+  executionBatch ExecutionBatch @relation(fields: [executionBatchId], references: [id], onDelete: Cascade)
+
+  currentStepSequence Int @default(1)
+
+  recipeWritten Boolean @default(false)
+
+  status KneaderExecutionStatus @default(READY)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
