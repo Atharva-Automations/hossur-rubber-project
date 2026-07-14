@@ -2,6 +2,7 @@ import { PlcService } from './plc.service';
 import { MIXING_REGISTERS } from '../config/registers/mixing.registers';
 import { decodePLCAscii } from '../utils/decode-plc-ascii';
 import { MixingPlcService } from './mixing-plc.service';
+import { PlcType } from '../config/plc-type';
 
 export class MixingListenerService {
   private timer?: NodeJS.Timeout;
@@ -21,7 +22,8 @@ export class MixingListenerService {
       try {
         const scanTrigger = await this.plc.readCoils(
           MIXING_REGISTERS.SCAN_TRIGGER,
-          1
+          1,
+          PlcType.MIXING
         );
 
         // console.log("M0 =", scanTrigger[0]);
@@ -30,7 +32,8 @@ export class MixingListenerService {
 
         const stageComplete = await this.plc.readCoils(
           MIXING_REGISTERS.STAGE_COMPLETE,
-          1
+          1,
+          PlcType.MIXING
         );
 
         const scanState = scanTrigger[0];
@@ -39,7 +42,8 @@ export class MixingListenerService {
         if (scanState && !this.lastScanState) {
           const registers = await this.plc.readWords(
             MIXING_REGISTERS.QR_START,
-            MIXING_REGISTERS.QR_LENGTH
+            MIXING_REGISTERS.QR_LENGTH,
+            PlcType.MIXING
           );
 
           const qrId = decodePLCAscii(registers);

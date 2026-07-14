@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { PlcService } from './plc.service';
 import { MIXING_REGISTERS } from '../config/registers/mixing.registers';
+import { PlcType } from '../config/plc-type';
 
 export class MixingPlcService {
   private currentExecutionBatchId?: number;
@@ -41,7 +42,8 @@ export class MixingPlcService {
 
       await this.plc.writeRegister(
         MIXING_REGISTERS.TOTAL_STAGES,
-        data.totalStages
+        data.totalStages,
+        PlcType.MIXING
       );
 
       await axios.post('http://localhost:3000/mixing/recipe-written', {
@@ -89,11 +91,16 @@ export class MixingPlcService {
     }
     await this.setBit(MIXING_REGISTERS.CORRECT_QR);
     if (data.firstIngredient) {
-      await this.plc.writeRegister(MIXING_REGISTERS.STAGE_TIME, data.stageTime);
+      await this.plc.writeRegister(
+        MIXING_REGISTERS.STAGE_TIME,
+        data.stageTime,
+        PlcType.MIXING
+      );
 
       await this.plc.writeRegister(
         MIXING_REGISTERS.CURRENT_STAGE,
-        data.currentStage
+        data.currentStage,
+        PlcType.MIXING
       );
     }
     if (data.scanNext) {
@@ -150,12 +157,13 @@ export class MixingPlcService {
     await this.plc.writeAscii(
       MIXING_REGISTERS.RECIPE_START,
       recipeName,
-      MIXING_REGISTERS.RECIPE_LENGTH
+      MIXING_REGISTERS.RECIPE_LENGTH,
+      PlcType.MIXING
     );
   }
 
   private async setBit(address: number) {
     console.log(`Setting M${address}`);
-    await this.plc.writeCoil(address, true);
+    await this.plc.writeCoil(address, true, PlcType.MIXING);
   }
 }

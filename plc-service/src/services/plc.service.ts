@@ -2,112 +2,114 @@ import ModbusRTU from 'modbus-serial';
 import { PRODUCTION_PLC } from '../config/production.plc';
 import { PRODUCTION_REGISTERS } from '../config/registers/production.registers';
 import { MIXING_PLC } from '../config/mixing.plc';
+import { PlcType } from '../config/plc-type';
+
+interface PlcConfig {
+  host: string;
+  port: number;
+  unitId: number;
+  timeout: number;
+}
 
 export class PlcService {
   // --------------------------------------------------------------------------
   // Properties
-  private readonly client = new ModbusRTU();
-  private readonly mixingClient = new ModbusRTU();
-  private isConnected = false;
-  private isMixingConnected = false;
+  private readonly clients = {
+    [PlcType.PRODUCTION]: new ModbusRTU(),
+    [PlcType.MIXING]: new ModbusRTU(),
+  };
 
-  D_OFFSET = 4096;
+  private readonly connected = {
+    [PlcType.PRODUCTION]: false,
+    [PlcType.MIXING]: false,
+  };
+
+  private readonly D_OFFSET = 4096;
   // --------------------------------------------------------------------------
 
   // --------------------------------------------------------------------------
   // Lifecycle
   async start(): Promise<void> {
-    await this.connect();
-    await this.connectMixing();
+    await this.connect(PlcType.PRODUCTION, PRODUCTION_PLC);
+
+    await this.connect(PlcType.MIXING, MIXING_PLC);
   }
   // --------------------------------------------------------------------------
 
   // --------------------------------------------------------------------------
   // Connection
-  private async connect() {
-    try {
-      console.log('🔌 Attempting to connect to PLC...');
-      await this.client.connectTCP(PRODUCTION_PLC.host, {
-        port: PRODUCTION_PLC.port,
-      });
-      this.client.setID(PRODUCTION_PLC.unitId);
-      this.client.setTimeout(PRODUCTION_PLC.timeout);
+  private getClient(type: PlcType): ModbusRTU {
+    return this.clients[type];
+  }
 
-      // const test = await this.client.readHoldingRegisters(0, 1);
-      console.log('✅ Connected to PLC');
-
-      this.isConnected = true;
-    } catch (error: any) {
-      console.error('❌ PLC connection failed:', error?.message || error);
-      this.isConnected = false;
+  private ensureConnected(type: PlcType) {
+    if (!this.connected[type]) {
+      throw new Error(`${type} PLC not connected`);
     }
   }
 
-  private async connectMixing() {
+  private async connect(type: PlcType, config: PlcConfig) {
     try {
-      console.log('🔌 Connecting to Mixing PLC...');
+      console.log(`Connecting ${type} PLC...`);
 
-      await this.mixingClient.connectTCP(MIXING_PLC.host, {
-        port: MIXING_PLC.port,
+      const client = this.getClient(type);
+
+      await client.connectTCP(config.host, {
+        port: config.port,
       });
 
-      this.mixingClient.setID(MIXING_PLC.unitId);
-      this.mixingClient.setTimeout(MIXING_PLC.timeout);
+      client.setID(config.unitId);
+      client.setTimeout(config.timeout);
 
-      console.log('✅ Connected to Mixing PLC');
+      this.connected[type] = true;
 
-      this.isMixingConnected = true;
-    } catch (error: any) {
-      console.error(
-        '❌ Mixing PLC connection failed:',
-        error?.message || error
-      );
+      console.log(`${type} PLC Connected`);
+    } catch (err: any) {
+      this.connected[type] = false;
 
-      this.isMixingConnected = false;
+      console.error(err.message);
     }
   }
 
-  private ensureConnected(): void {
-    if (!this.isConnected) {
-      throw new Error('Production PLC not connected');
-    }
-    if (!this.isMixingConnected) {
-      throw new Error('Mixing PLC not connected');
-    }
-  }
   // --------------------------------------------------------------------------
 
   // --------------------------------------------------------------------------
   // Read Operations
-  async readRegisters(start = 0, count = 100) {
-    this.ensureConnected();
-    const res = await this.client.readHoldingRegisters(start + 4096, count);
+  async readRegisters(start = 0, count = 100, plc: PlcType = PlcType.PRODUCTION) {
+    this.ensureConnected(plc);
+    const client = this.getClient(plc);
+    const res = await client.readHoldingRegisters(start + 4096, count);
     return res.data.map((v, i) => ({
       address: start + i,
       value: v,
     }));
   }
 
-  async readWords(address: number, count: number): Promise<number[]> {
-    this.ensureConnected();
+  async readWords(address: number, count: number, plc: PlcType = PlcType.PRODUCTION): Promise<number[]> {
+    this.ensureConnected(plc);
+    const client = this.getClient(plc);
+    const res = await client.readHoldingRegisters(address + 4096, count);
+    return res.data;
+  }
 
-    const res = await this.client.readHoldingRegisters(address + 4096, count);
+  async readCoils(
+    start: number,
+    count: number,
+    plc: PlcType = PlcType.PRODUCTION
+  ) {
+    this.ensureConnected(plc);
+
+    const client = this.getClient(plc);
+
+    const res = await client.readCoils(start + 2048, count);
 
     return res.data;
   }
 
-  async readCoils(start: number, count: number) {
-    this.ensureConnected();
-
-    const res = await this.client.readCoils(start + 2048, count);
-
-    return res.data;
-  }
-
-  async readDWord(address: number): Promise<number> {
-    this.ensureConnected();
-
-    const result = await this.client.readHoldingRegisters(address + 4096, 2);
+  async readDWord(address: number, plc: PlcType = PlcType.PRODUCTION): Promise<number> {
+    this.ensureConnected(plc);
+    const client = this.getClient(plc);
+    const result = await client.readHoldingRegisters(address + 4096, 2);
 
     const low = result.data[0];
     const high = result.data[1];
@@ -118,16 +120,18 @@ export class PlcService {
 
   // --------------------------------------------------------------------------
   // Write Operations
-  async writeRegister(address: number, value: number) {
-    this.ensureConnected();
-    await this.client.writeRegister(this.D_OFFSET + address, value);
+  async writeRegister(address: number, value: number, plc: PlcType = PlcType.PRODUCTION) {
+    this.ensureConnected(plc);
+    const client = this.getClient(plc);
+    await client.writeRegister(this.D_OFFSET + address, value);
     return { success: true, address, value };
   }
 
-  async writeCoil(address: number, value: boolean) {
-    this.ensureConnected();
+  async writeCoil(address: number, value: boolean, plc: PlcType = PlcType.PRODUCTION) {
+    this.ensureConnected(plc);
+    const client = this.getClient(plc);
 
-    await this.client.writeCoil(address + 2048, value);
+    await client.writeCoil(address + 2048, value);
 
     return {
       success: true,
@@ -136,19 +140,20 @@ export class PlcService {
     };
   }
 
-  async writeWord(address: number, value: number) {
-    return this.writeRegister(address, value);
+  async writeWord(address: number, value: number, plc: PlcType = PlcType.PRODUCTION) {
+    return this.writeRegister(address, value, plc);
   }
 
-  async writeWords(address: number, values: number[]) {
-    this.ensureConnected();
+  async writeWords(address: number, values: number[], plc: PlcType = PlcType.PRODUCTION) {
+    this.ensureConnected(plc);
+    const client = this.getClient(plc);
 
-    await this.client.writeRegisters(address + this.D_OFFSET, values);
+    await client.writeRegisters(address + this.D_OFFSET, values);
 
     return true;
   }
 
-  async writeFloat(address: number, value: number) {
+  async writeFloat(address: number, value: number, plc: PlcType = PlcType.PRODUCTION) {
     const buffer = Buffer.alloc(4);
 
     buffer.writeFloatBE(value);
@@ -156,17 +161,17 @@ export class PlcService {
     const high = buffer.readUInt16BE(0);
     const low = buffer.readUInt16BE(2);
 
-    await this.writeWords(address, [low, high]);
+    await this.writeWords(address, [low, high], plc);
   }
 
-  async writeDWord(address: number, value: number) {
+  async writeDWord(address: number, value: number, plc: PlcType = PlcType.PRODUCTION) {
     const high = (value >> 16) & 0xffff;
     const low = value & 0xffff;
 
-    await this.writeWords(address, [low, high]);
+    await this.writeWords(address, [low, high], plc);
   }
 
-  async writeAscii(address: number, text: string, words: number) {
+  async writeAscii(address: number, text: string, words: number, plc: PlcType = PlcType.PRODUCTION) {
     const buffer = Buffer.alloc(words * 2);
 
     buffer.write(text);
@@ -177,7 +182,7 @@ export class PlcService {
       registers.push(buffer.readUInt16BE(i * 2));
     }
 
-    await this.writeWords(address, registers);
+    await this.writeWords(address, registers, plc);
   }
   // --------------------------------------------------------------------------
 
