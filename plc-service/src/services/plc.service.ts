@@ -1,12 +1,15 @@
 import ModbusRTU from 'modbus-serial';
 import { PRODUCTION_PLC } from '../config/production.plc';
 import { PRODUCTION_REGISTERS } from '../config/registers/production.registers';
+import { MIXING_PLC } from '../config/mixing.plc';
 
 export class PlcService {
   // --------------------------------------------------------------------------
   // Properties
   private readonly client = new ModbusRTU();
+  private readonly mixingClient = new ModbusRTU();
   private isConnected = false;
+  private isMixingConnected = false;
 
   D_OFFSET = 4096;
   // --------------------------------------------------------------------------
@@ -15,6 +18,7 @@ export class PlcService {
   // Lifecycle
   async start(): Promise<void> {
     await this.connect();
+    await this.connectMixing();
   }
   // --------------------------------------------------------------------------
 
@@ -39,9 +43,36 @@ export class PlcService {
     }
   }
 
+  private async connectMixing() {
+    try {
+      console.log('🔌 Connecting to Mixing PLC...');
+
+      await this.mixingClient.connectTCP(MIXING_PLC.host, {
+        port: MIXING_PLC.port,
+      });
+
+      this.mixingClient.setID(MIXING_PLC.unitId);
+      this.mixingClient.setTimeout(MIXING_PLC.timeout);
+
+      console.log('✅ Connected to Mixing PLC');
+
+      this.isMixingConnected = true;
+    } catch (error: any) {
+      console.error(
+        '❌ Mixing PLC connection failed:',
+        error?.message || error
+      );
+
+      this.isMixingConnected = false;
+    }
+  }
+
   private ensureConnected(): void {
     if (!this.isConnected) {
-      throw new Error('PLC not connected');
+      throw new Error('Production PLC not connected');
+    }
+    if (!this.isMixingConnected) {
+      throw new Error('Mixing PLC not connected');
     }
   }
   // --------------------------------------------------------------------------

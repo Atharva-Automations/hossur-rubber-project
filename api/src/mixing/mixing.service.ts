@@ -392,7 +392,7 @@ export class MixingService {
       data: {
         qrId,
 
-        batchId: batch.id,
+        executionBatchId: batch.id,
 
         recipeId: batch.execution.recipe.id,
       },

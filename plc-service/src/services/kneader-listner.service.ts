@@ -8,6 +8,7 @@ export class KneaderListenerService {
   private lastScanState = false;
   private lastStageCompleteState = false;
   private processingStageComplete = false;
+  private processingScan = false;
 
   constructor(
     private readonly plc: PlcService,
@@ -34,20 +35,30 @@ export class KneaderListenerService {
 
         // console.log(`M600: ${scanState} | M614: ${stageState}`);
 
-        if (scanState && !this.lastScanState) {
-          const registers = await this.plc.readWords(
-            KNEADER_REGISTERS.QR_START,
-            KNEADER_REGISTERS.QR_LENGTH
-          );
-
-          const qrId = decodePLCAscii(registers);
+        if (scanState && !this.lastScanState && !this.processingScan) {
+          this.processingScan = true;
+          this.lastScanState = true;
 
           try {
+            const registers = await this.plc.readWords(
+              KNEADER_REGISTERS.QR_START,
+              KNEADER_REGISTERS.QR_LENGTH
+            );
+
+            const qrId = decodePLCAscii(registers);
+
             console.log(`📥 Kneader QR : ${qrId}`);
+
             await this.kneader.processQr(qrId.trim());
           } finally {
             await this.plc.writeCoil(KNEADER_REGISTERS.SCAN_TRIGGER, false);
+
+            this.processingScan = false;
           }
+        }
+
+        if (!scanState) {
+          this.lastScanState = false;
         }
 
         this.lastScanState = scanState;
@@ -70,8 +81,6 @@ export class KneaderListenerService {
         if (!stageState) {
           this.processingStageComplete = false;
         }
-
-        this.lastStageCompleteState = stageState;
 
         this.lastStageCompleteState = stageState;
       } catch (err) {

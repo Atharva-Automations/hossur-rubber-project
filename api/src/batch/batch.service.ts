@@ -1390,75 +1390,75 @@ export class BatchService {
     };
   }
 
-  async finalizeBatch(batchId: number) {
-    const batch = await this.prisma.batch.findUnique({
-      where: { id: batchId },
-      include: { productExecutions: true },
-    });
+  // async finalizeBatch(batchId: number) {
+  //   const batch = await this.prisma.batch.findUnique({
+  //     where: { id: batchId },
+  //     include: { productExecutions: true },
+  //   });
 
-    if (!batch) {
-      throw new BadRequestException('Batch not found');
-    }
+  //   if (!batch) {
+  //     throw new BadRequestException('Batch not found');
+  //   }
 
-    const allProductsDone = batch.productExecutions.every(
-      (p) => p.status === 'PRODUCT_COMPLETED'
-    );
+  //   const allProductsDone = batch.productExecutions.every(
+  //     (p) => p.status === 'PRODUCT_COMPLETED'
+  //   );
 
-    if (!allProductsDone) {
-      throw new BadRequestException(
-        'All products must be PRODUCT_COMPLETED before generating Batch QR'
-      );
-    }
+  //   if (!allProductsDone) {
+  //     throw new BadRequestException(
+  //       'All products must be PRODUCT_COMPLETED before generating Batch QR'
+  //     );
+  //   }
 
-    const existing = await this.prisma.finalBatch.findFirst({
-      where: { batchId },
-    });
+  //   const existing = await this.prisma.finalBatch.findFirst({
+  //     where: { batchId },
+  //   });
 
-    if (existing) {
-      return {
-        ok: true,
-        alreadyExists: true,
-        qrId: existing.qrId,
-        finalBatchId: existing.id,
-        createdAt: existing.createdAt,
-      };
-    }
+  //   if (existing) {
+  //     return {
+  //       ok: true,
+  //       alreadyExists: true,
+  //       qrId: existing.qrId,
+  //       finalBatchId: existing.id,
+  //       createdAt: existing.createdAt,
+  //     };
+  //   }
 
-    const qrId = `FB-${batchId}-${Date.now()}`;
+  //   const qrId = `FB-${batchId}-${Date.now()}`;
 
-    const created = await this.prisma.finalBatch.create({
-      data: {
-        batchId,
-        qrId,
-      },
-    });
+  //   const created = await this.prisma.finalBatch.create({
+  //     data: {
+  //       batchId,
+  //       qrId,
+  //     },
+  //   });
 
-    await this.prisma.batch.update({
-      where: { id: batchId },
-      data: { status: 'COMPLETED' },
-    });
+  //   await this.prisma.batch.update({
+  //     where: { id: batchId },
+  //     data: { status: 'COMPLETED' },
+  //   });
 
-    return {
-      ok: true,
-      qrId: created.qrId,
-      finalBatchId: created.id,
-      createdAt: created.createdAt,
-    };
-  }
+  //   return {
+  //     ok: true,
+  //     qrId: created.qrId,
+  //     finalBatchId: created.id,
+  //     createdAt: created.createdAt,
+  //   };
+  // }
 
-  async getBatchQr(batchId: number) {
-    const final = await this.prisma.finalBatch.findUnique({
-      where: { batchId },
-    });
+  // async getBatchQr(batchId: number) {
+  //   const final = await this.prisma.finalBatch.findUnique({
+  //     where: { batchId },
+  //   });
 
-    if (!final) {
-      throw new BadRequestException('Batch QR not generated yet');
-    }
+  //   if (!final) {
+  //     throw new BadRequestException('Batch QR not generated yet');
+  //   }
 
-    return {
-      qrId: final.qrId,
-      batchId,
-      createdAt: final.createdAt,
-    };
-  }
+  //   return {
+  //     qrId: final.qrId,
+  //     batchId,
+  //     createdAt: final.createdAt,
+  //   };
+  // }
 }

@@ -185,13 +185,13 @@ export class BatchController {
     return this.service.getFinalizedProductQr(batchId, productExecutionId);
   }
 
-  @Post(':id/finalize-batch')
-  async finalizeBatch(@Param('id', ParseIntPipe) id: number) {
-    return this.service.finalizeBatch(id);
-  }
+  // @Post(':id/finalize-batch')
+  // async finalizeBatch(@Param('id', ParseIntPipe) id: number) {
+  //   return this.service.finalizeBatch(id);
+  // }
 
-  @Get(':id/qr')
-  async getBatchQr(@Param('id', ParseIntPipe) id: number) {
-    return this.service.getBatchQr(id);
-  }
+  // @Get(':id/qr')
+  // async getBatchQr(@Param('id', ParseIntPipe) id: number) {
+  //   return this.service.getBatchQr(id);
+  // }
 }

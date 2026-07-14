@@ -16,12 +16,17 @@ export class MixingListenerService {
   ) {}
 
   start() {
+    console.log('Mixing listener running');
     this.timer = setInterval(async () => {
       try {
         const scanTrigger = await this.plc.readCoils(
           MIXING_REGISTERS.SCAN_TRIGGER,
           1
         );
+
+        // console.log("M0 =", scanTrigger[0]);
+        const res = await (this.plc as any).client.readCoils(2048, 1);
+        console.log(res.data[0]);
 
         const stageComplete = await this.plc.readCoils(
           MIXING_REGISTERS.STAGE_COMPLETE,
