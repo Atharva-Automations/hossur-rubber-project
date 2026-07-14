@@ -27,8 +27,8 @@ export class MixingListenerService {
         );
 
         // console.log("M0 =", scanTrigger[0]);
-        const res = await (this.plc as any).client.readCoils(2048, 1);
-        console.log(res.data[0]);
+        // const res = await (this.plc as any).client.readCoils(2048, 1);
+        // console.log(res.data[0]);
 
         const stageComplete = await this.plc.readCoils(
           MIXING_REGISTERS.STAGE_COMPLETE,

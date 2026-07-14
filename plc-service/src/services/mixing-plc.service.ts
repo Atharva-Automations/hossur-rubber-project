@@ -21,40 +21,48 @@ export class MixingPlcService {
   }
 
   private async processMasterBatch(qrId: string) {
-    const { data } = await axios.post(
-      'http://localhost:3000/mixing/scan-master-batch',
-      {
-        qrId,
-      }
-    );
-    this.currentExecutionBatchId = data.executionBatchId;
-    switch (data.result) {
-      case 'MASTER_BATCH_NOT_FOUND':
-        await this.setBit(MIXING_REGISTERS.WRONG_QR);
-        return;
-
-      case 'MASTER_BATCH_ALREADY_USED':
-        await this.setBit(MIXING_REGISTERS.PROCESS_ALREADY_DONE);
-        return;
-    }
-    if (data.writeRecipe) {
-      await this.writeRecipe(data.recipeName);
-
-      await this.plc.writeRegister(
-        MIXING_REGISTERS.TOTAL_STAGES,
-        data.totalStages,
-        PlcType.MIXING
+    try {
+      const { data } = await axios.post(
+        'http://localhost:3000/mixing/scan-master-batch',
+        {
+          qrId,
+        }
       );
+      this.currentExecutionBatchId = data.executionBatchId;
+      switch (data.result) {
+        case 'MASTER_BATCH_NOT_FOUND':
+          await this.setBit(MIXING_REGISTERS.WRONG_QR);
+          return;
 
-      await axios.post('http://localhost:3000/mixing/recipe-written', {
-        executionBatchId: data.executionBatchId,
-      });
+        case 'MASTER_BATCH_ALREADY_USED':
+          await this.setBit(MIXING_REGISTERS.PROCESS_ALREADY_DONE);
+          return;
+      }
+      if (data.writeRecipe) {
+        await this.writeRecipe(data.recipeName);
+
+        await this.plc.writeRegister(
+          MIXING_REGISTERS.TOTAL_STAGES,
+          data.totalStages,
+          PlcType.MIXING
+        );
+
+        await axios.post('http://localhost:3000/mixing/recipe-written', {
+          executionBatchId: data.executionBatchId,
+        });
+      }
+      await this.setBit(MIXING_REGISTERS.CORRECT_QR);
+
+      this.masterBatchScanned = true;
+
+      return data;
+    } catch (err: any) {
+      console.log('Backend Error:');
+      console.log(err.response?.data);
+      console.log(err.response?.data?.message);
+
+      throw err;
     }
-    await this.setBit(MIXING_REGISTERS.CORRECT_QR);
-
-    this.masterBatchScanned = true;
-
-    return data;
   }
 
   private async processIngredient(qrId: string) {
