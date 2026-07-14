@@ -10,6 +10,8 @@ export const KNEADER_REGISTERS = {
   RECIPE_START: 750,
   RECIPE_LENGTH: 10,
 
+  TOTAL_STAGES: 780,
+
   // Timers
   STAGE_1: 770,
   STAGE_2: 772,

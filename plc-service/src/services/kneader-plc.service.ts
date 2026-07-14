@@ -44,6 +44,11 @@ export class KneaderPlcService {
 
       await this.writeRecipe(data.recipeCode);
 
+      await this.plc.writeRegister(
+        KNEADER_REGISTERS.TOTAL_STAGES,
+        data.totalStages
+      );
+
       console.log('Writing Stage Timings...');
 
       await this.writeStageTimings(data.stageTimings);
@@ -80,6 +85,12 @@ export class KneaderPlcService {
       await this.plc.writeCoil(KNEADER_REGISTERS.BATCH_COMPLETE, true);
 
       console.log('Master Batch QR:', result.qrId);
+
+      await axios.post('http://localhost:3000/printer/mixing/master-batch', {
+        qrId: result.qrId,
+        recipeCode: result.recipeCode,
+        batchNumber: result.batchNumber,
+      });
 
       this.currentExecutionBatchId = undefined;
 

@@ -5,6 +5,7 @@ import { TscPrinterClient } from './transport/tsc-printer.client';
 import { PrinterStatusService } from './services/printer-status.service';
 import { InwardPrinterService } from './services/inward-printer.service';
 import { WeighingPrinterService } from './services/weighing-printer.service';
+import { MixingPrinterService } from './services/mixing-printer.service';
 
 @Module({
   controllers: [PrinterController],
@@ -14,6 +15,7 @@ import { WeighingPrinterService } from './services/weighing-printer.service';
     InwardPrinterService,
     PrinterStatusService,
     TscPrinterClient,
+    MixingPrinterService,
   ],
   exports: [PrinterService], // Export so other modules can use it
 })

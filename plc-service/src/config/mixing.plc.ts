@@ -1,5 +1,5 @@
 export const MIXING_PLC = {
-  host: '192.168.1.5', // same IP for now
+  host: '192.168.1.20',
   port: 502,
   unitId: 1,
   timeout: 3000,

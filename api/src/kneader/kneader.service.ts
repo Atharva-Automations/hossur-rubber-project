@@ -8,11 +8,13 @@ import {
   Prisma,
   KneaderExecutionStatus,
   BatchProcessStatus,
+  RecipeStep,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CompleteStageDto, ScanKneaderDto } from './dto/scan-kneader.dto';
 import { RecipeWrittenDto } from './dto/recipe-written.dto';
 import { KneaderResult } from './types/kneader-response.type';
+import { StepType } from '../recipe/dto/create-recipe.dto';
 
 @Injectable()
 export class KneaderService {
@@ -181,6 +183,10 @@ export class KneaderService {
         recipeCode: batch.execution.recipe.recipeCode,
 
         stageTimings: this.buildStageTimings(batch.execution.recipe.steps),
+
+        totalStages: batch.execution.recipe.steps.filter(
+          (step) => step.stepType === StepType.KNEADER
+        ).length,
 
         readyToStart: allScanned,
 
@@ -374,18 +380,20 @@ export class KneaderService {
     );
   }
 
-  private buildStageTimings(recipeSteps: any[]): number[] {
-    const kneaderSteps = recipeSteps
-      .filter((step) => step.stepType === 'KNEADER')
+  private buildStageTimings(steps: RecipeStep[]) {
+    const timings: number[] = [];
+
+    const kneaderSteps = steps
+      .filter((step) => step.stepType === StepType.KNEADER)
       .sort((a, b) => a.sequenceNumber - b.sequenceNumber);
 
-    const timings = [0, 0, 0, 0, 0];
+    for (const step of kneaderSteps) {
+      timings.push(step.timerSeconds);
+    }
 
-    const startIndex = 5 - kneaderSteps.length;
-
-    kneaderSteps.forEach((step, index) => {
-      timings[startIndex + index] = step.timerSeconds;
-    });
+    while (timings.length < 5) {
+      timings.push(0);
+    }
 
     return timings;
   }

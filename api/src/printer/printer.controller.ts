@@ -1,12 +1,14 @@
 import { Controller, Post, Get, Body } from '@nestjs/common';
 import { PrinterService } from './printer.service';
 import { WeighingPrinterService } from './services/weighing-printer.service';
+import { MixingPrinterService } from './services/mixing-printer.service';
 
 @Controller('printer')
 export class PrinterController {
   constructor(
     private readonly printerService: PrinterService,
-    private readonly weighingPrinterService: WeighingPrinterService
+    private readonly weighingPrinterService: WeighingPrinterService,
+    private readonly mixingPrinterService: MixingPrinterService
   ) {}
 
   @Post('print')
@@ -40,6 +42,20 @@ export class PrinterController {
     return {
       success: true,
     };
+  }
+
+  @Post('mixing/master-batch')
+  async printMasterBatch(
+    @Body() body: { qrId: string; recipeCode: string; batchNumber: number }
+  ) {
+    return this.mixingPrinterService.printMasterBatch(body);
+  }
+
+  @Post('mixing/final-batch')
+  async printFinalBatch(
+    @Body() body: { qrId: string; recipeCode: string; batchNumber: number }
+  ) {
+    return this.mixingPrinterService.printFinalBatch(body);
   }
 
   @Get('test')

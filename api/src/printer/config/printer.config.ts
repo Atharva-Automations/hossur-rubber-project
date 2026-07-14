@@ -10,7 +10,7 @@ export const PRINTERS = {
   },
 
   mixing: {
-    ip: '192.168.1.77',
+    ip: '192.168.1.75',
     port: 9100,
   },
 

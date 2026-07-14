@@ -118,9 +118,11 @@ export class MixingPlcService {
 
       console.log('Final Batch QR:', result.qrId);
 
-      // TODO
-      // Printer Service
-      // await printer.printFinalBatch(result.qrId);
+      await axios.post('http://localhost:3000/printer/mixing/final-batch', {
+        qrId: result.qrId,
+        recipeCode: result.recipeCode,
+        batchNumber: result.batchNumber,
+      });
 
       this.currentExecutionBatchId = undefined;
       this.masterBatchScanned = false;
