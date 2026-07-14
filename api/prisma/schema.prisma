@@ -104,11 +104,21 @@ enum MasterBatchStatus {
   SCRAPPED
 }
 
-
 enum KneaderExecutionStatus {
   READY
   RUNNING
   COMPLETED
+}
+
+enum MixingExecutionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum FinalBatchStatus {
+  CREATED
+  CONSUMED
 }
 
 // ─────────────────────────────────────────────
@@ -242,6 +252,7 @@ model Recipe {
   executions Execution[]
 
   masterBatches MasterBatch[]
+  finalBatches FinalBatch[]
 }
 
 // ─────────────────────────────────────────────
@@ -313,7 +324,6 @@ model Batch {
   finalProducts     FinalProduct[]
   productExecutions ProductExecution[]
   bulkSeeds         BulkWeighingSeed[]
-  finalBatch        FinalBatch?
 }
 
 // ─────────────────────────────────────────────
@@ -521,18 +531,6 @@ model FinalProduct {
   @@index([productExecutionId])
 }
 
-//
-//
-//
-model FinalBatch {
-  id        Int      @id @default(autoincrement())
-  batchId   Int      @unique
-  qrId      String
-  createdAt DateTime @default(now())
-
-  batch Batch @relation(fields: [batchId], references: [id])
-}
-
 model Execution {
   id            Int    @id @default(autoincrement())
   executionCode String @unique
@@ -571,8 +569,10 @@ model ExecutionBatch {
 
   ingredients ExecutionIngredient[]
 
-  masterBatch MasterBatch?
   kneaderExecution KneaderExecution?
+  masterBatch MasterBatch?
+  mixingExecution MixingExecution?
+  finalBatch FinalBatch?
 
   @@unique([executionId, batchNumber])
   @@index([executionId])
@@ -602,6 +602,7 @@ model ExecutionIngredient {
 
   status IngredientExecutionStatus @default(PENDING)
   kneaderScanned Boolean @default(false)
+  mixingScanned Boolean @default(false)
 
   weighedAt   DateTime?
   completedAt DateTime?
@@ -649,4 +650,41 @@ model KneaderExecution {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model MixingExecution {
+  id Int @id @default(autoincrement())
+
+  executionBatchId Int @unique
+  executionBatch ExecutionBatch @relation(fields: [executionBatchId], references: [id], onDelete: Cascade)
+
+  currentStageSequence Int @default(1)
+
+  recipeWritten Boolean @default(false)
+
+  status MixingExecutionStatus @default(PENDING)
+
+  startedAt DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+model FinalBatch {
+  id Int @id @default(autoincrement())
+
+  qrId String @unique
+
+  executionBatchId Int @unique
+  executionBatch ExecutionBatch @relation(fields:[executionBatchId], references:[id], onDelete:Cascade)
+  recipeId Int
+  recipe Recipe @relation(fields:[recipeId], references:[id])
+
+  createdAt DateTime @default(now())
+
+  consumedAt DateTime?
+
+  status FinalBatchStatus @default(CREATED)
+
+  @@index([recipeId])
 }

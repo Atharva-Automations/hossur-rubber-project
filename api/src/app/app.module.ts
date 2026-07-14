@@ -12,6 +12,7 @@ import { ExecutionModule } from '../execution/execution.module';
 import { ScannerModule } from '../scanner/scanner.module';
 import { WeighingModule } from '../bulk-weighing/weighing.module';
 import { KneaderModule } from '../kneader/kneader.module';
+import { MixingModule } from '../mixing/mixing.module';
 // import { PlcModule } from '../plc/plc.module';
 
 @Module({
@@ -30,6 +31,7 @@ import { KneaderModule } from '../kneader/kneader.module';
     ScannerModule,
     WeighingModule,
     KneaderModule,
+    MixingModule,
   ],
 })
 export class AppModule {}

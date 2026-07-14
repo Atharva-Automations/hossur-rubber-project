@@ -5,6 +5,8 @@ import { WeighingPlcService } from './services/weighing-plc.service';
 import { WeighingListenerService } from './services/weighing-listner.service';
 import { KneaderListenerService } from './services/kneader-listner.service';
 import { KneaderPlcService } from './services/kneader-plc.service';
+import { MixingListenerService } from './services/mixing-listner.service';
+import { MixingPlcService } from './services/mixing-plc.service';
 
 const host = process.env.HOST ?? 'localhost';
 const port = process.env.PORT ? Number(process.env.PORT) : 3002;
@@ -33,6 +35,13 @@ async function bootstrap() {
     kneaderPlcService
   );
   kneaderListener.start();
+
+  const mixingPlcService = new MixingPlcService(plcService);
+  const mixingListener = new MixingListenerService(
+    plcService,
+    mixingPlcService
+  );
+  mixingListener.start();
 
   // Health check
   app.get('/health', (req, res) => {

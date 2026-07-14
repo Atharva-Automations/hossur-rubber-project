@@ -337,6 +337,12 @@ export class KneaderService {
       },
     });
 
+    await tx.mixingExecution.create({
+      data: {
+        executionBatchId: batch.id,
+      },
+    });
+
     return {
       success: true,
       stageCompleted: true,
