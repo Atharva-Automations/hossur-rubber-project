@@ -125,6 +125,7 @@ export class KneaderPlcService {
   }
 
   private async setBit(address: number) {
+    console.log(`Setting M${address}`);
     await this.plc.writeCoil(address, true);
   }
 }

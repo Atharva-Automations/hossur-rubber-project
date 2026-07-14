@@ -61,14 +61,6 @@ async function bootstrap() {
   });
 
   //------------------------------ Debug route-----------------------------------
-  app.get('/plc/debug/d350', async (req, res) => {
-    try {
-      const result = await plcService.readD350Debug();
-      res.json(result);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
 
   app.post('/test/weighing', async (req, res) => {
     try {

@@ -7,6 +7,7 @@ export class KneaderListenerService {
   private timer?: NodeJS.Timeout;
   private lastScanState = false;
   private lastStageCompleteState = false;
+  private processingStageComplete = false;
 
   constructor(
     private readonly plc: PlcService,
@@ -14,6 +15,7 @@ export class KneaderListenerService {
   ) {}
 
   start() {
+    console.log('Kneader Listener Service started.');
     this.timer = setInterval(async () => {
       try {
         const scanTrigger = await this.plc.readCoils(
@@ -28,6 +30,9 @@ export class KneaderListenerService {
 
         const scanState = scanTrigger[0];
         const stageState = stageComplete[0];
+        // console.log(`M614 State: ${stageState}`);
+
+        // console.log(`M600: ${scanState} | M614: ${stageState}`);
 
         if (scanState && !this.lastScanState) {
           const registers = await this.plc.readWords(
@@ -46,19 +51,27 @@ export class KneaderListenerService {
         }
 
         this.lastScanState = scanState;
+        if (
+          stageState &&
+          !this.lastStageCompleteState &&
+          !this.processingStageComplete
+        ) {
+          this.processingStageComplete = true;
 
-        if (stageState && !this.lastStageCompleteState) {
-          console.log('🏁 Kneader Stage Complete');
-          await this.kneader.onStageComplete();
-        }
+          console.log('🏁 Stage Complete Detected');
 
-        if (stageState && !this.lastStageCompleteState) {
           try {
             await this.kneader.onStageComplete();
-          } finally {
-            await this.plc.writeCoil(KNEADER_REGISTERS.STAGE_COMPLETE, false);
+          } catch (err) {
+            console.error(err);
           }
         }
+
+        if (!stageState) {
+          this.processingStageComplete = false;
+        }
+
+        this.lastStageCompleteState = stageState;
 
         this.lastStageCompleteState = stageState;
       } catch (err) {

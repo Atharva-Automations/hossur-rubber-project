@@ -29,8 +29,8 @@ export class PlcService {
       this.client.setID(PRODUCTION_PLC.unitId);
       this.client.setTimeout(PRODUCTION_PLC.timeout);
 
-      const test = await this.client.readHoldingRegisters(0, 1);
-      console.log('✅ Connected to PLC, test value:', test.data[0]);
+      // const test = await this.client.readHoldingRegisters(0, 1);
+      console.log('✅ Connected to PLC');
 
       this.isConnected = true;
     } catch (error: any) {
@@ -50,7 +50,7 @@ export class PlcService {
   // Read Operations
   async readRegisters(start = 0, count = 100) {
     this.ensureConnected();
-    const res = await this.client.readHoldingRegisters(start, count);
+    const res = await this.client.readHoldingRegisters(start + 4096, count);
     return res.data.map((v, i) => ({
       address: start + i,
       value: v,
@@ -60,7 +60,7 @@ export class PlcService {
   async readWords(address: number, count: number): Promise<number[]> {
     this.ensureConnected();
 
-    const res = await this.client.readHoldingRegisters(address, count);
+    const res = await this.client.readHoldingRegisters(address + 4096, count);
 
     return res.data;
   }
@@ -68,7 +68,7 @@ export class PlcService {
   async readCoils(start: number, count: number) {
     this.ensureConnected();
 
-    const res = await this.client.readCoils(start, count);
+    const res = await this.client.readCoils(start + 2048, count);
 
     return res.data;
   }
@@ -76,7 +76,7 @@ export class PlcService {
   async readDWord(address: number): Promise<number> {
     this.ensureConnected();
 
-    const result = await this.client.readHoldingRegisters(address, 2);
+    const result = await this.client.readHoldingRegisters(address + 4096, 2);
 
     const low = result.data[0];
     const high = result.data[1];
@@ -96,7 +96,7 @@ export class PlcService {
   async writeCoil(address: number, value: boolean) {
     this.ensureConnected();
 
-    await this.client.writeCoil(address, value);
+    await this.client.writeCoil(address + 2048, value);
 
     return {
       success: true,
@@ -112,7 +112,7 @@ export class PlcService {
   async writeWords(address: number, values: number[]) {
     this.ensureConnected();
 
-    await this.client.writeRegisters(address, values);
+    await this.client.writeRegisters(address + this.D_OFFSET, values);
 
     return true;
   }
@@ -179,102 +179,5 @@ export class PlcService {
 
     console.log(`✅ Bin ${binNumber} loading signal sent (D${register} = 2)`);
   }
-  // --------------------------------------------------------------------------
-
-  // --------------------------------------------------------------------------
-  // Debug (Temporary)
-  async readD350Debug() {
-    this.ensureConnected();
-    console.log('\n========== 📡 DEBUG: Reading D350 ==========');
-    const result = await this.client.readHoldingRegisters(350, 1);
-    const value = result.data[0];
-    const asciiChar = this.decodeSingleRegister(value);
-    console.log('Raw value from d350:', value);
-    console.log('Type:', typeof value);
-    console.log('Hex:', '0x' + value.toString(16));
-    console.log('Binary:', value.toString(2));
-    console.log('As ASCII char:', asciiChar);
-    console.log('========== END D350 DEBUG ==========\n');
-    return {
-      address: 350,
-      value,
-      hex: '0x' + value.toString(16),
-      ascii: asciiChar,
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  async readD350ToD360Debug() {
-    this.ensureConnected();
-    console.log('\n========== 📡 DEBUG: Reading D350-D360 ==========');
-    const result = await this.client.readHoldingRegisters(350, 11);
-    const parsed = result.data.map((v, i) => ({
-      address: 350 + i,
-      value: v,
-      hex: '0x' + v.toString(16),
-      ascii: v > 31 && v < 127 ? String.fromCharCode(v) : '?',
-    }));
-    console.log('Registers:', parsed);
-    const qrString = parsed.map((p) => p.ascii).join('');
-    console.log('Parsed as string:', qrString);
-    console.log('========== END D350-D360 DEBUG ==========\n');
-    return {
-      registers: parsed,
-      parsedString: qrString,
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  // async scanAvailableRegisters() {
-  //   this.ensureConnected();
-  //   console.log('\n========== 📡 Scanning Available Registers ==========');
-
-  //   const results: {
-  //     [key: number]: { value: number; success: boolean; error?: string };
-  //   } = {};
-
-  //   // Test ranges commonly used
-  //   const testRanges = [
-  //     { start: 0, count: 50, label: 'Range 0-50' },
-  //     { start: 100, count: 50, label: 'Range 100-150' },
-  //     { start: 200, count: 50, label: 'Range 200-250' },
-  //     { start: 300, count: 100, label: 'Range 300-400' },
-  //     { start: 4596, count: 4996, label: 'Range 500-600' },
-  //   ];
-
-  //   for (const range of testRanges) {
-  //     try {
-  //       console.log(`\nTesting ${range.label}...`);
-  //       const regs = await this.client.readHoldingRegisters(
-  //         range.start,
-  //         range.count
-  //       );
-  //       console.log(
-  //         `✅ ${range.label} - accessible (read ${regs.data.length} registers)`
-  //       );
-
-  //       // Log first 5 non-zero values
-  //       const nonZero = regs.data
-  //         .map((v, i) => ({ addr: range.start + i, val: v }))
-  //         .filter((x) => x.val !== 0)
-  //         .slice(0, 5);
-
-  //       if (nonZero.length > 0) {
-  //         console.log(
-  //           `   Non-zero values: ${nonZero
-  //             .map((x) => `d${x.addr}=${x.val}`)
-  //             .join(', ')}`
-  //         );
-  //       }
-  //     } catch (err: any) {
-  //       console.warn(
-  //         `❌ ${range.label} - not accessible: ${err?.message || err}`
-  //       );
-  //     }
-  //   }
-
-  //   console.log('\n========== END Scan ==========\n');
-  //   return { scanned: true, timestamp: new Date().toISOString() };
-  // }
   // --------------------------------------------------------------------------
 }

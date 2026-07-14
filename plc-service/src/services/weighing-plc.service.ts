@@ -8,6 +8,7 @@ export class WeighingPlcService {
   constructor(private readonly plcService: PlcService) {}
 
   async process(payload: any) {
+    console.log('Weighing Service started.');
     this.currentQrId = payload.currentIngredient.qrId;
     console.log('Received weighing payload');
 

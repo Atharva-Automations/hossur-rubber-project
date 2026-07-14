@@ -1,10 +1,18 @@
 export function decodePLCAscii(registers: number[]): string {
-  const bytes: number[] = [];
+  let qr = '';
 
   for (const value of registers) {
-    bytes.push((value >> 8) & 0xff);
-    bytes.push(value & 0xff);
+    const low = value & 0xff;
+    const high = (value >> 8) & 0xff;
+
+    if (low !== 0) {
+      qr += String.fromCharCode(low);
+    }
+
+    if (high !== 0) {
+      qr += String.fromCharCode(high);
+    }
   }
 
-  return Buffer.from(bytes).toString('ascii').replace(/\0/g, '').trim();
+  return qr.trim();
 }

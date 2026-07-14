@@ -13,9 +13,15 @@ export class WeighingListenerService {
   ) {}
 
   start() {
+    console.log('Weighing Listener Service started.');
     this.timer = setInterval(async () => {
       try {
-        const current = (await this.plcService.readCoils(2051, 1))[0];
+        const current = (
+          await this.plcService.readCoils(
+            WEIGHING_REGISTERS.WEIGHING_DONE_BIT,
+            1
+          )
+        )[0];
 
         // Detect M3 OFF -> ON (Rising Edge)
         if (!this.lastM3State && current) {
@@ -27,7 +33,7 @@ export class WeighingListenerService {
           }
 
           const rawWeight = await this.plcService.readDWord(
-            WEIGHING_REGISTERS.ACTUAL_WEIGHT + 4096
+            WEIGHING_REGISTERS.ACTUAL_WEIGHT
           );
 
           const actualWeight = rawWeight / 10;
@@ -44,7 +50,7 @@ export class WeighingListenerService {
           // await this.weighingPlcService.closeCurrentBin();
 
           await this.plcService.writeCoil(
-            WEIGHING_REGISTERS.WEIGHING_DONE_BIT + WEIGHING_REGISTERS.M_OFFSET,
+            WEIGHING_REGISTERS.WEIGHING_DONE_BIT,
             false
           );
 

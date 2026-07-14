@@ -2,11 +2,7 @@ import axios from 'axios';
 
 import { PlcService } from './plc.service';
 import { PRODUCTION_REGISTERS } from '../config/registers/production.registers';
-import { PRODUCTION_PLC } from '../config/production.plc';
 import { WeighingPlcService } from './weighing-plc.service';
-
-const M_OFFSET = PRODUCTION_PLC.offsets.M;
-const D_OFFSET = PRODUCTION_PLC.offsets.D;
 
 export class ScannerService {
   constructor(
@@ -52,7 +48,7 @@ export class ScannerService {
 
   async isScanAvailable(): Promise<boolean> {
     const coils = await this.plcService.readCoils(
-      M_OFFSET + PRODUCTION_REGISTERS.SCANNER.TRIGGER,
+      PRODUCTION_REGISTERS.SCANNER.TRIGGER,
       1
     );
 
@@ -61,7 +57,7 @@ export class ScannerService {
 
   async readQRCodeRegisters(): Promise<number[]> {
     const registers = await this.plcService.readRegisters(
-      D_OFFSET + PRODUCTION_REGISTERS.SCANNER.QR_START,
+      PRODUCTION_REGISTERS.SCANNER.QR_START,
       PRODUCTION_REGISTERS.SCANNER.QR_LENGTH
     );
 
@@ -95,7 +91,7 @@ export class ScannerService {
     const qrCode = this.decodeQRCode(registers);
 
     await this.plcService.writeCoil(
-      PRODUCTION_PLC.offsets.M + PRODUCTION_REGISTERS.SCANNER.TRIGGER,
+      PRODUCTION_REGISTERS.SCANNER.TRIGGER,
       false
     );
 
@@ -112,32 +108,20 @@ export class ScannerService {
 
   private async triggerScanSuccess() {
     console.log('turning m2 on');
-    await this.plcService.writeCoil(
-      M_OFFSET + PRODUCTION_REGISTERS.SCANNER.SUCCESS,
-      true
-    );
+    await this.plcService.writeCoil(PRODUCTION_REGISTERS.SCANNER.SUCCESS, true);
 
     console.log('m2 is on');
 
     await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // await this.plcService.writeCoil(
-    //   M_OFFSET + PRODUCTION_REGISTERS.SCANNER.SUCCESS,
-    //   false
-    // );
-    // console.log('turning m2 off');
   }
 
   private async triggerScanFailure() {
-    await this.plcService.writeCoil(
-      M_OFFSET + PRODUCTION_REGISTERS.SCANNER.FAILURE,
-      true
-    );
+    await this.plcService.writeCoil(PRODUCTION_REGISTERS.SCANNER.FAILURE, true);
 
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     await this.plcService.writeCoil(
-      M_OFFSET + PRODUCTION_REGISTERS.SCANNER.FAILURE,
+      PRODUCTION_REGISTERS.SCANNER.FAILURE,
       false
     );
   }
