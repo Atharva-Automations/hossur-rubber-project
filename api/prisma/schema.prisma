@@ -121,6 +121,11 @@ enum FinalBatchStatus {
   CONSUMED
 }
 
+enum QcStatus {
+  PASS
+  FAIL
+} 
+
 // ─────────────────────────────────────────────
 // InwardEntry  — main batch-level record
 // ─────────────────────────────────────────────
@@ -253,6 +258,8 @@ model Recipe {
 
   masterBatches MasterBatch[]
   finalBatches FinalBatch[]
+
+  qcSpecification QcSpecification?
 }
 
 // ─────────────────────────────────────────────
@@ -686,5 +693,53 @@ model FinalBatch {
 
   status FinalBatchStatus @default(CREATED)
 
+  qcInspections QcInspection[]
+
   @@index([recipeId])
+}
+
+model QcSpecification {
+  id Int @id @default(autoincrement())
+
+  recipeId Int @unique
+  recipe   Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  hardness         Float?
+  tensile          Float?
+  elongation       Float?
+  specificGravity  Float?
+  compressionSet   Float?
+
+  qcInspections QcInspection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model QcInspection {
+  id Int @id @default(autoincrement())
+
+  finalBatchId Int
+  finalBatch   FinalBatch @relation(fields: [finalBatchId], references: [id], onDelete: Cascade)
+
+  qcSpecificationId Int
+  qcSpecification   QcSpecification @relation(fields: [qcSpecificationId], references: [id])
+
+  hardnessActual        Float?
+  tensileActual         Float?
+  elongationActual      Float?
+  specificGravityActual Float?
+  compressionSetActual  Float?
+
+  status QcStatus
+
+  remarks String?
+
+  testedAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([finalBatchId])
+  @@index([qcSpecificationId])
 }

@@ -14,8 +14,6 @@ import {
 } from '@/components/ui/select';
 import { useIngredients } from '@/hooks/useIngredients';
 
-type Unit = 'KG' | 'L' | 'G' | 'ML';
-
 export default function StepList({
   steps,
   onChange,
@@ -31,8 +29,6 @@ export default function StepList({
   if (!steps || !steps.length) {
     return <p className="text-sm text-gray-500">No steps added yet.</p>;
   }
-
-  const UNITS: Unit[] = ['KG', 'L', 'G', 'ML'];
 
   return (
     <div className="space-y-4">

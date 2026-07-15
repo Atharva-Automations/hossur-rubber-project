@@ -12,10 +12,8 @@ import {
   LineChart,
   CheckSquare,
   FileText,
-  Cpu,
   QrCode,
   Settings,
-  PlayCircle,
 } from 'lucide-react';
 
 const menu = [
@@ -30,10 +28,10 @@ const menu = [
   { label: 'Process Tracking', href: '/process', icon: LineChart },
   { label: 'QC', href: '/qc', icon: CheckSquare },
   { label: 'Reports', href: '/reports', icon: FileText },
-  { label: 'PLC monitor', href: '/plc', icon: Cpu },
+  // { label: 'PLC monitor', href: '/plc', icon: Cpu },
   { label: 'QR preview', href: '/qr-preview', icon: QrCode },
   { label: 'Settings', href: '/settings', icon: Settings },
-  { label: 'Simulation', href: '/simulation', icon: PlayCircle },
+  // { label: 'Simulation', href: '/simulation', icon: PlayCircle },
 ];
 
 export default function Sidebar() {
