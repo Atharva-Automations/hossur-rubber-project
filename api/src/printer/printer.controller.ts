@@ -2,19 +2,35 @@ import { Controller, Post, Get, Body } from '@nestjs/common';
 import { PrinterService } from './printer.service';
 import { WeighingPrinterService } from './services/weighing-printer.service';
 import { MixingPrinterService } from './services/mixing-printer.service';
+import { QcPrinterService } from './services/qc-printer.service';
 
 @Controller('printer')
 export class PrinterController {
   constructor(
     private readonly printerService: PrinterService,
     private readonly weighingPrinterService: WeighingPrinterService,
-    private readonly mixingPrinterService: MixingPrinterService
+    private readonly mixingPrinterService: MixingPrinterService,
+    private readonly qcPrinterService: QcPrinterService
   ) {}
 
   @Post('print')
   async printLabel(@Body() body: { qrId: string }) {
     await this.printerService.printLabel(body.qrId);
     return { success: true, message: 'Label printed successfully' };
+  }
+
+  @Post('qc/print')
+  async printQcLabel(
+    @Body()
+    body: {
+      qrId: string;
+      recipeCode: string;
+      batchNumber: number;
+      qcResult: 'PASS' | 'FAIL';
+    }
+  ) {
+    await this.qcPrinterService.printQcLabel(body);
+    return { success: true, message: 'QC label printed successfully' };
   }
 
   @Post('print-batch')

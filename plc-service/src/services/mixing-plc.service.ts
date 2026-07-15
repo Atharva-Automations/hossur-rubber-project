@@ -131,6 +131,8 @@ export class MixingPlcService {
     if (result.batchCompleted) {
       console.log('Mixing Batch Completed');
 
+      await this.setBit(MIXING_REGISTERS.BATCH_COMPLETE);
+
       console.log('Final Batch QR:', result.qrId);
 
       await axios.post('http://localhost:3000/printer/mixing/final-batch', {

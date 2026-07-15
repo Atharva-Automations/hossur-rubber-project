@@ -25,6 +25,8 @@ export const MIXING_REGISTERS = {
 
   STAGE_COMPLETE: 10, // M10
 
+  BATCH_COMPLETE: 11, // M11
+
   SCAN_NEXT: 12, // M12
 
   // -----------------------------

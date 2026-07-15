@@ -26,10 +26,6 @@ export class MixingListenerService {
           PlcType.MIXING
         );
 
-        // console.log("M0 =", scanTrigger[0]);
-        // const res = await (this.plc as any).client.readCoils(2048, 1);
-        // console.log(res.data[0]);
-
         const stageComplete = await this.plc.readCoils(
           MIXING_REGISTERS.STAGE_COMPLETE,
           1,
@@ -50,7 +46,16 @@ export class MixingListenerService {
 
           console.log('Mixing QR:', qrId);
 
-          await this.mixing.processQr(qrId.trim());
+          try {
+            await this.mixing.processQr(qrId.trim());
+          } finally {
+            // Reset the PLC trigger after processing
+            await this.plc.writeCoil(
+              MIXING_REGISTERS.SCAN_TRIGGER,
+              false,
+              PlcType.MIXING
+            );
+          }
         }
 
         this.lastScanState = scanState;

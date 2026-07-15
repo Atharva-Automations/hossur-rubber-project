@@ -17,7 +17,6 @@ export default function QrPreviewModal({ open, onClose, executionId }: any) {
   const [execution, setExecution] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState(false);
-  const [printProgress, setPrintProgress] = useState({ current: 0, total: 0 });
   const [printerStatus, setPrinterStatus] = useState<
     'unknown' | 'connected' | 'disconnected'
   >('unknown');
@@ -71,35 +70,40 @@ export default function QrPreviewModal({ open, onClose, executionId }: any) {
     }
   };
 
-  const handlePrintAll = async () => {
-    // console.log('Printing all labels:', qrCodes);
+  const handlePrintByType = async (stepType: 'KNEADER' | 'MIXING') => {
+    if (!currentBatch) return;
+
+    const filteredIngredients = currentBatch.ingredients.filter(
+      (ingredient: any) => ingredient.stepType === stepType
+    );
+
+    if (!filteredIngredients.length) {
+      toast.error(
+        `No ${stepType.toLowerCase()} QR codes found for batch ${
+          currentBatch.batchNumber
+        }`
+      );
+      return;
+    }
+
     try {
       setPrinting(true);
-      setPrintProgress({
-        current: 0,
-        total:
-          execution?.batches?.reduce(
-            (count: number, batch: any) => count + batch.ingredients.length,
-            0
-          ) || 0,
-      });
 
-      // Send batch request to backend
       await api.post('/printer/weighing/print-batch', {
-        qrCodes: execution?.batches?.flatMap((batch: any) =>
-          batch.ingredients.map((ingredient: any) => ({
-            qrId: ingredient.qrId,
-          }))
-        ),
+        qrCodes: filteredIngredients.map((ingredient: any) => ({
+          qrId: ingredient.qrId,
+        })),
       });
 
-      // toast.success(`${qrCodes.length} labels printed successfully`);
+      toast.success(
+        `Batch ${
+          currentBatch.batchNumber
+        } ${stepType.toLowerCase()} labels printed successfully`
+      );
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Batch print failed');
-      console.error('Batch print error:', error);
     } finally {
       setPrinting(false);
-      setPrintProgress({ current: 0, total: 0 });
     }
   };
 
@@ -124,11 +128,15 @@ export default function QrPreviewModal({ open, onClose, executionId }: any) {
     }
   };
 
-  const totalQrCount =
-    execution?.batches?.reduce(
-      (count: number, batch: any) => count + batch.ingredients.length,
-      0
-    ) ?? 0;
+  const kneaderQrCount =
+    currentBatch?.ingredients.filter(
+      (ingredient: any) => ingredient.stepType === 'KNEADER'
+    ).length ?? 0;
+
+  const mixingQrCount =
+    currentBatch?.ingredients.filter(
+      (ingredient: any) => ingredient.stepType === 'MIXING'
+    ).length ?? 0;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -191,13 +199,12 @@ export default function QrPreviewModal({ open, onClose, executionId }: any) {
             <p className="text-center py-6 text-gray-500">No QR codes found.</p>
           )}
 
-          {/* Print Progress */}
-          {printing && printProgress.total > 0 && (
+          {printing && (
             <div className="mb-4 p-4 bg-blue-50 rounded-lg">
               <div className="flex items-center gap-3">
                 <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
                 <span className="text-sm font-medium text-blue-900">
-                  Printing {printProgress.current} of {printProgress.total}...
+                  Printing labels...
                 </span>
               </div>
             </div>
@@ -230,6 +237,7 @@ export default function QrPreviewModal({ open, onClose, executionId }: any) {
                     </p>
 
                     <p className="mt-1 text-sm font-medium">
+                      {(ingredient.stepType || 'UNKNOWN').toUpperCase()} |{' '}
                       {ingredient.ingredientCode}
                     </p>
 
@@ -252,29 +260,45 @@ export default function QrPreviewModal({ open, onClose, executionId }: any) {
           )}
         </div>
 
-        <div className="flex justify-center gap-4 mt-6">
+        <div className="flex justify-center gap-4 mt-6 flex-wrap">
           <Button variant="outline" onClick={() => onClose(false)}>
             Close
           </Button>
 
           {currentBatch && (
-            <Button
-              variant="outline"
-              onClick={handlePrintCurrentBatch}
-              disabled={printing || printerStatus !== 'connected'}
-            >
-              Print Batch {currentBatch.batchNumber}
-            </Button>
-          )}
+            <>
+              <Button
+                variant="outline"
+                onClick={handlePrintCurrentBatch}
+                disabled={printing || printerStatus !== 'connected'}
+              >
+                Print Batch {currentBatch.batchNumber}
+              </Button>
 
-          {execution && (
-            <Button
-              className="bg-green-600 hover:bg-green-700"
-              onClick={handlePrintAll}
-              disabled={printing || printerStatus !== 'connected'}
-            >
-              Print All ({totalQrCount} labels)
-            </Button>
+              <Button
+                variant="outline"
+                onClick={() => handlePrintByType('KNEADER')}
+                disabled={
+                  printing ||
+                  printerStatus !== 'connected' ||
+                  kneaderQrCount === 0
+                }
+              >
+                Print Kneader ({kneaderQrCount})
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => handlePrintByType('MIXING')}
+                disabled={
+                  printing ||
+                  printerStatus !== 'connected' ||
+                  mixingQrCount === 0
+                }
+              >
+                Print Mixing ({mixingQrCount})
+              </Button>
+            </>
           )}
         </div>
       </DialogContent>

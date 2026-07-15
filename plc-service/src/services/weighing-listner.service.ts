@@ -40,14 +40,13 @@ export class WeighingListenerService {
 
           console.log(`Weight Captured: ${actualWeight} g for QR ${qrId}`);
 
-          await axios.post('http://localhost:3000/weighing/complete', {
-            qrId,
-            weight: actualWeight,
-          });
-
-          // await new Promise((resolve) => setTimeout(resolve, 10000));
-
-          // await this.weighingPlcService.closeCurrentBin();
+          const { data } = await axios.post(
+            'http://localhost:3000/weighing/complete',
+            {
+              qrId,
+              weight: actualWeight,
+            }
+          );
 
           await this.plcService.writeCoil(
             WEIGHING_REGISTERS.WEIGHING_DONE_BIT,
@@ -55,6 +54,12 @@ export class WeighingListenerService {
           );
 
           this.weighingPlcService.clearCurrentQr();
+
+          if (data.isLastIngredient) {
+            await new Promise((resolve) => setTimeout(resolve, 10000));
+
+            await this.weighingPlcService.closeAllBins();
+          }
 
           console.log('Ingredient completed.');
         }

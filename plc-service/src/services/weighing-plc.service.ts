@@ -128,4 +128,16 @@ export class WeighingPlcService {
 
     this.currentBinNumber = null;
   }
+
+  async closeAllBins() {
+    const registers = Object.values(WEIGHING_REGISTERS.BIN_UNLOADING);
+
+    for (const register of registers) {
+      await this.plcService.writeWord(register, 1);
+    }
+
+    this.currentBinNumber = null;
+
+    console.log('All bins closed.');
+  }
 }

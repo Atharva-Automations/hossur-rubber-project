@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/global';
 import { Button } from '@/components/ui/button';
@@ -53,6 +53,27 @@ export default function QcSpecificationTab() {
     queryKey: ['recipes'],
     queryFn: async () => (await api.get('/recipes')).data,
   });
+
+  const { data: specifications = [] } = useQuery({
+    queryKey: ['qc-specifications'],
+    queryFn: async () => (await qcApi.getSpecifications()).data,
+  });
+
+  const filteredRecipes = useMemo(() => {
+    const selectedRecipeId = Number(formData.recipeId);
+
+    return recipes.filter((recipe: { id: number }) => {
+      const hasSpec = specifications.some(
+        (spec) => spec.recipeId === recipe.id
+      );
+
+      if (editingId) {
+        return !hasSpec || recipe.id === selectedRecipeId;
+      }
+
+      return !hasSpec;
+    });
+  }, [recipes, specifications, editingId, formData.recipeId]);
 
   const createSpecification = useMutation({
     mutationFn: (data: QcSpecificationPayload) =>
@@ -179,19 +200,28 @@ export default function QcSpecificationTab() {
                   />
                 </SelectTrigger>
                 <SelectContent className="bg-white border-gray-200">
-                  {recipes.map(
-                    (recipe: {
-                      id: number;
-                      recipeCode: string;
-                      name: string;
-                    }) => (
-                      <SelectItem key={recipe.id} value={String(recipe.id)}>
-                        {recipe.recipeCode} - {recipe.name}
-                      </SelectItem>
+                  {filteredRecipes.length > 0 ? (
+                    filteredRecipes.map(
+                      (recipe: {
+                        id: number;
+                        recipeCode: string;
+                        name: string;
+                      }) => (
+                        <SelectItem key={recipe.id} value={String(recipe.id)}>
+                          {recipe.recipeCode} - {recipe.name}
+                        </SelectItem>
+                      )
                     )
+                  ) : (
+                    <SelectItem value="no-recipes" disabled>
+                      No recipes available
+                    </SelectItem>
                   )}
                 </SelectContent>
               </Select>
+              <p className="mt-2 text-sm text-gray-500">
+                Recipes with existing specifications are hidden from the list.
+              </p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">

@@ -55,6 +55,23 @@ export interface InspectionPayload {
   remarks?: string;
 }
 
+export interface QcInspectionHistoryItem {
+  id: number;
+  status: 'PASS' | 'FAIL';
+  finalBatch: {
+    qrId: string;
+    recipe: {
+      recipeCode: string;
+    };
+    executionBatch: {
+      batchNumber: number;
+      execution: {
+        executionCode: string;
+      };
+    };
+  };
+}
+
 export const qcApi = {
   getSpecifications: () => api.get<QcSpecification[]>('/qc/specification'),
 
@@ -70,4 +87,15 @@ export const qcApi = {
 
   createInspection: (data: InspectionPayload) =>
     api.post('/qc/inspection', data),
+
+  getInspections: () => api.get<QcInspectionHistoryItem[]>('/qc/inspection'),
+
+  printQrLabel: (qrId: string) => api.post('/printer/print', { qrId }),
+
+  printQcLabel: (data: {
+    qrId: string;
+    recipeCode: string;
+    batchNumber: number;
+    qcResult: 'PASS' | 'FAIL';
+  }) => api.post('/printer/qc/print', data),
 };

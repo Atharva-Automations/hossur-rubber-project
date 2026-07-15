@@ -239,7 +239,16 @@ export class QcService {
       },
 
       include: {
-        finalBatch: true,
+        finalBatch: {
+          include: {
+            recipe: true,
+            executionBatch: {
+              include: {
+                execution: true,
+              },
+            },
+          },
+        },
         qcSpecification: true,
       },
     });
@@ -248,5 +257,25 @@ export class QcService {
       message: `QC ${passed ? 'PASSED' : 'FAILED'} Successfully.`,
       inspection,
     };
+  }
+
+  async findAllInspections() {
+    return this.prisma.qcInspection.findMany({
+      include: {
+        finalBatch: {
+          include: {
+            recipe: true,
+            executionBatch: {
+              include: {
+                execution: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        testedAt: 'desc',
+      },
+    });
   }
 }

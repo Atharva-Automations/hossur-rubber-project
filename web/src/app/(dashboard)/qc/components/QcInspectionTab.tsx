@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/global';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import {
   type ScanQcResponse,
 } from '../services/qc.api';
 import { getInspectionOutcome } from './qc-utils';
+import QcHistoryTable from './QcHistoryTable';
 
 const parameterFields = [
   { key: 'hardnessActual', label: 'Hardness' },
@@ -58,11 +59,14 @@ export default function QcInspectionTab() {
     },
   });
 
+  const queryClient = useQueryClient();
+
   const createInspection = useMutation({
     mutationFn: async (payload: InspectionPayload) =>
       (await qcApi.createInspection(payload)).data,
     onSuccess: (res: { message?: string }) => {
       toast({ title: res.message || 'Inspection saved successfully' });
+      queryClient.invalidateQueries({ queryKey: ['qc-inspections'] });
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
       toast({
@@ -287,6 +291,18 @@ export default function QcInspectionTab() {
           </div>
         </Card>
       )}
+
+      <div>
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">
+            QC Inspection History
+          </h3>
+          <p className="text-sm text-gray-600">
+            View past inspections and print QR labels for inspected batches.
+          </p>
+        </div>
+        <QcHistoryTable />
+      </div>
     </div>
   );
 }

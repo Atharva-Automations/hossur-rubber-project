@@ -144,6 +144,11 @@ export class ExecutionService {
                     ingredientCode: true,
                   },
                 },
+                recipeStep: {
+                  select: {
+                    stepType: true,
+                  },
+                },
               },
             },
           },
@@ -170,6 +175,7 @@ export class ExecutionService {
           quantity: ingredient.quantity,
           tolerance: ingredient.tolerance,
           ingredientCode: ingredient.ingredient.ingredientCode,
+          stepType: ingredient.recipeStep?.stepType ?? null,
         })),
       })),
     };

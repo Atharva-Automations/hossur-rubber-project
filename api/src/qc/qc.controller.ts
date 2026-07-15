@@ -51,6 +51,11 @@ export class QcController {
     return this.qcService.scanQr(dto);
   }
 
+  @Get('inspection')
+  findAllInspections() {
+    return this.qcService.findAllInspections();
+  }
+
   @Post('inspection')
   createInspection(@Body() dto: CreateQcInspectionDto) {
     return this.qcService.createInspection(dto);
