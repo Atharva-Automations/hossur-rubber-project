@@ -17,6 +17,8 @@ export interface WeighingLabelData {
   batchNumber: number;
   ingredientCode: string;
   binNumber: string;
+  sequenceNumber?: string | number;
+  sequenceModule?: string;
   quantity: number;
   tolerance: number;
   julianDate: string;

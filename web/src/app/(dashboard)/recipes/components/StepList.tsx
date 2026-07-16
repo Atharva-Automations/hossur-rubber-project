@@ -66,46 +66,6 @@ export default function StepList({
                 />
               </div>
 
-              {/* <div>
-                <Label>Pressure (bar)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.1"
-                  value={s.pressure ? String(s.pressure) : ''}
-                  onChange={(e) =>
-                    onChange(s.id, { pressure: Number(e.target.value) })
-                  }
-                  disabled={disabled}
-                />
-              </div> */}
-
-              {/* <div>
-                <Label>Temperature (°C)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={s.temperature ? String(s.temperature) : ''}
-                  onChange={(e) =>
-                    onChange(s.id, { temperature: Number(e.target.value) })
-                  }
-                  disabled={disabled}
-                />
-              </div> */}
-
-              {/* <div>
-                <Label>RPM</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={s.rpm ? String(s.rpm) : ''}
-                  onChange={(e) =>
-                    onChange(s.id, { rpm: Number(e.target.value) })
-                  }
-                  disabled={disabled}
-                />
-              </div> */}
-
               <div className="flex items-end justify-end gap-2">
                 <Button
                   variant="outline"
@@ -174,7 +134,7 @@ export default function StepList({
                       </Select>
                     </div>
 
-                    <div className="col-span-2  ">
+                    <div className="col-span-2 flex items-center justify-center gap-2">
                       <Label className="sr-only">Quantity</Label>
                       <Input
                         type="number"
@@ -188,9 +148,12 @@ export default function StepList({
                         }
                         disabled={disabled}
                       />
+                      <Label className="text-sm font-medium text-gray-700">
+                        GM
+                      </Label>
                     </div>
 
-                    <div className="col-span-2">
+                    <div className="col-span-2 flex items-center justify-center gap-2">
                       <Label className="sr-only">Tolerance</Label>
                       <Input
                         type="number"
@@ -204,28 +167,10 @@ export default function StepList({
                         }
                         disabled={disabled}
                       />
+                      <Label className="text-sm font-medium text-gray-700">
+                        GM
+                      </Label>
                     </div>
-
-                    {/* <div className="col-span-2">
-                      <Label className="sr-only">Unit</Label>
-                      <Select
-                        value={ing.unit}
-                        onValueChange={(v) =>
-                          onChangeIngredient(s.id, ing.id, { unit: v as Unit })
-                        }
-                      >
-                        <SelectTrigger className="bg-white">
-                          <SelectValue placeholder="Unit" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-white">
-                          {UNITS.map((u) => (
-                            <SelectItem key={u} value={u}>
-                              {u}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div> */}
 
                     <div className="col-span-2 flex items-center justify-end">
                       <Button

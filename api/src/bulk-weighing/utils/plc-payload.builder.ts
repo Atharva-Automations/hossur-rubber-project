@@ -28,6 +28,8 @@ export function buildPlcPayload(
 
     if (binNumber >= 32 && binNumber <= 34) return 3;
 
+    if (binNumber >= 35) return 4;
+
     throw new Error(`Invalid bin number ${binNumber}`);
   }
 

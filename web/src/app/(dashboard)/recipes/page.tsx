@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Header, PageContainer } from '@/components/global';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
+import RecipeTable from './components/RecipeTable';
 
 export default function RecipePage() {
   return (
@@ -21,6 +22,10 @@ export default function RecipePage() {
             Add Recipe
           </Button>
         </Link>
+      </div>
+
+      <div className="mt-8">
+        <RecipeTable />
       </div>
     </PageContainer>
   );

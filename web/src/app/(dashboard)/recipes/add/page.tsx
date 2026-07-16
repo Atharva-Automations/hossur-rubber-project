@@ -546,15 +546,6 @@ export default function RecipeAddPage() {
                                 <span>
                                   <b>Timer:</b> {s.timerSeconds || '—'}s
                                 </span>
-                                {/* <span>
-                                  <b>Pressure:</b> {s.pressure || '—'} bar
-                                </span>
-                                <span>
-                                  <b>Temp:</b> {s.temperature || '—'} °C
-                                </span>
-                                <span>
-                                  <b>RPM:</b> {s.rpm || '—'}
-                                </span> */}
                                 <span>
                                   <b>Ingredients:</b> {s.ingredients.length}
                                 </span>
@@ -562,8 +553,8 @@ export default function RecipeAddPage() {
                               <ul className="list-disc ml-6 mt-2">
                                 {s.ingredients.map((i) => (
                                   <li key={i.id}>
-                                    {i.name || '—'} — {i.quantity || '0'}{' '}
-                                    {i.unit}
+                                    {i.name || '—'} — {i.quantity || '0'} GM (±
+                                    {i.tolerance || '0'} GM)
                                   </li>
                                 ))}
                               </ul>

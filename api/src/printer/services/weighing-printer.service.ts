@@ -36,6 +36,8 @@ export class WeighingPrinterService {
               },
             },
           },
+
+          recipeStep: true,
         },
       });
 
@@ -46,7 +48,8 @@ export class WeighingPrinterService {
     return {
       qrId: executionIngredient.qrId,
 
-      recipeCode: executionIngredient.executionBatch.execution.recipe.recipeCode,
+      recipeCode:
+        executionIngredient.executionBatch.execution.recipe.recipeCode,
 
       executionCode: executionIngredient.executionBatch.execution.executionCode,
 
@@ -55,6 +58,9 @@ export class WeighingPrinterService {
       ingredientCode: executionIngredient.ingredient.ingredientCode,
 
       binNumber: executionIngredient.ingredient.bins[0]?.binNumber ?? '-',
+
+      sequenceNumber: executionIngredient.recipeStep.sequenceNumber,
+      sequenceModule: executionIngredient.recipeStep.stepType,
 
       quantity: executionIngredient.quantity,
 

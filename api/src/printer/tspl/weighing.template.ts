@@ -7,6 +7,8 @@ interface WeighingLabelData {
 
   ingredientCode: string;
   binNumber: string;
+  sequenceNumber?: string | number;
+  sequenceModule?: string;
 
   quantity: number;
 
@@ -22,6 +24,9 @@ export function generateWeighingTSPL(data: WeighingLabelData): string {
     data.mode === 'SEQUENTIAL' ? 'WEIGHING - SEQUENTIAL' : 'WEIGHING - BULK';
 
   const headingX = data.mode === 'SEQUENTIAL' ? 150 : 210;
+  const sequenceLabel = `${(
+    data.sequenceModule ?? 'KNEADER'
+  ).toUpperCase()} - SEQUENCE NO.`;
 
   return [
     'SIZE 100 mm, 50 mm',
@@ -53,11 +58,15 @@ export function generateWeighingTSPL(data: WeighingLabelData): string {
       data.ingredientCode
     )}"`,
 
-    `TEXT 330,250,"0",0,9,9,"BIN NO. : ${escapeTsplText(data.binNumber)}"`,
+    `TEXT 330,230,"0",0,9,9,"${sequenceLabel} : ${escapeTsplText(
+      String(data.sequenceNumber ?? '')
+    )}"`,
 
-    `TEXT 330,290,"0",0,9,9,"QUANTITY : ${data.quantity} GM"`,
+    `TEXT 330,270,"0",0,9,9,"BIN NO. : ${escapeTsplText(data.binNumber)}"`,
 
-    `TEXT 330,330,"0",0,9,9,"TOLERANCE : ${data.tolerance} %"`,
+    `TEXT 330,310,"0",0,9,9,"QUANTITY : ${data.quantity} GM"`,
+
+    `TEXT 330,350,"0",0,9,9,"TOLERANCE : ${data.tolerance} GM"`,
 
     `TEXT 700,340,"0",0,7,6,"${escapeTsplText(data.julianDate)}"`,
 
