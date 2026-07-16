@@ -15,7 +15,7 @@ export const PRINTERS = {
   },
 
   qc: {
-    ip: '192.168.1.78',
+    ip: '192.168.1.75',
     port: 9100,
   },
 } as const;
